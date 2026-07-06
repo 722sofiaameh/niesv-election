@@ -1,0 +1,24 @@
+[
+  {
+    "name": "Branch Executive",
+    "positions": [
+      {
+        "title": "Chairman",
+        "candidates": ["John Doe", "Jane Smith"]
+      },
+      {
+        "title": "Secretary",
+        "candidates": ["Alice Johnson", "Bob Williams"]
+      }
+    ]
+  },
+  {
+    "name": "Women's Wing",
+    "positions": [
+      {
+        "title": "Coordinator",
+        "candidates": ["Mary Okonkwo", "Grace Adeyemi"]
+      }
+    ]
+  }
+]

@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CandidateStatus {
+  FELLOW
+  MEMBER
+}
+
+model Voter {
+  id                       String   @id @default(cuid())
+  name                     String
+  phoneNumber              String   @unique
+  memberRegistrationNumber String
+  hasVoted                 Boolean  @default(false)
+  otpCode                  String?
+  otpExpiresAt             DateTime?
+  createdAt                DateTime @default(now())
+
+  votes Vote[]
+}
+
+model Wing {
+  id     String     @id @default(cuid())
+  name   String
+  slug   String     @unique
+  positions Position[]
+}
+
+model Position {
+  id      String      @id @default(cuid())
+  title   String
+  wingId  String
+  order   Int
+  wing    Wing        @relation(fields: [wingId], references: [id], onDelete: Cascade)
+  candidates Candidate[]
+  votes   Vote[]
+
+  @@index([wingId])
+}
+
+model Candidate {
+  id                 String          @id @default(cuid())
+  name               String
+  positionId         String
+  photoUrl           String?
+  bio                String?         @db.Text
+  registrationNumber String?
+  status             CandidateStatus @default(MEMBER)
+  voteCount          Int             @default(0)
+  position           Position        @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  votes              Vote[]
+
+  @@index([positionId])
+}
+
+model Vote {
+  id          String   @id @default(cuid())
+  voterId     String
+  candidateId String
+  positionId  String
+  castAt      DateTime @default(now())
+  voter       Voter    @relation(fields: [voterId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  position    Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+
+  @@unique([voterId, positionId])
+  @@index([candidateId])
+  @@index([positionId])
+}
+
+model ElectionSettings {
+  id                String    @id @default(cuid())
+  isVotingOpen      Boolean   @default(false)
+  votingStartsAt    DateTime?
+  votingEndsAt      DateTime?
+  resultsArePublic  Boolean   @default(false)
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+}
