@@ -1,4 +1,5 @@
 import { CheckCircle2 } from "lucide-react";
+import Link from "next/link";
 
 import { FadeIn } from "@/components/ui/fade-in";
 
@@ -31,6 +32,24 @@ export function DoneScreen({ voterName }: DoneScreenProps) {
           Your choices have been saved securely. You cannot change your vote or
           vote again in this election.
         </p>
+      </FadeIn>
+      <FadeIn delay={400}>
+        <div className="mt-8 max-w-md space-y-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
+          <p>
+            Results will be published on this site once voting has closed.
+          </p>
+          <p>You can safely close this page.</p>
+          <p>
+            If something doesn&apos;t look right, use{" "}
+            <span className="font-semibold text-foreground">Need help?</span>{" "}
+            below to contact the election help desk.
+          </p>
+        </div>
+      </FadeIn>
+      <FadeIn delay={500}>
+        <Link href="/" className="voter-btn-secondary mt-8 px-6 py-2 text-base">
+          Return to home
+        </Link>
       </FadeIn>
     </div>
   );

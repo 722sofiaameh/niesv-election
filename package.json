@@ -14,7 +14,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:push": "prisma db push",
-    "admin:create": "tsx prisma/create-admin.ts"
+    "admin:create": "tsx prisma/create-admin.ts",
+    "voters:clear": "tsx prisma/clear-voters.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",
