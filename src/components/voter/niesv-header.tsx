@@ -1,5 +1,6 @@
-import Image from "next/image";
 import Link from "next/link";
+
+import { NiesvLogo } from "@/components/voter/niesv-logo";
 
 interface NiesvHeaderProps {
   subtitle?: string;
@@ -15,16 +16,7 @@ export function NiesvHeader({
       <div className="voter-brand-bar" />
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4 sm:py-5">
         <Link href="/" className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <div className="shrink-0 rounded-lg bg-white p-1.5 shadow-sm">
-            <Image
-              src="/niesv-logo.png"
-              alt="NIESV Abuja Branch crest"
-              width={80}
-              height={80}
-              className="h-12 w-12 object-contain sm:h-14 sm:w-14"
-              priority
-            />
-          </div>
+          <NiesvLogo priority />
           <div className="min-w-0 text-left">
             <p className="text-sm font-semibold leading-snug text-primary-foreground sm:text-base">
               {subtitle}

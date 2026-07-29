@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PositionChart } from "@/components/results/position-chart";
+import { ResultsBrandHeader } from "@/components/results/results-brand-header";
 import { ResultsHoldingScreen } from "@/components/results/results-holding-screen";
 import { Spinner } from "@/components/ui/spinner";
+import { NiesvLogo } from "@/components/voter/niesv-logo";
 import type { PublicResultsResponse } from "@/lib/results-data";
 
 const POLL_INTERVAL_MS = 5000;
@@ -42,7 +44,8 @@ export function LivePublicResults() {
 
   if (error && !data) {
     return (
-      <main className="results-theme flex min-h-screen flex-col items-center justify-center gap-4 bg-[hsl(var(--background))] px-8 text-[hsl(var(--foreground))]">
+      <main className="results-theme flex min-h-screen flex-col items-center justify-center gap-6 bg-[hsl(var(--background))] px-8 text-[hsl(var(--foreground))]">
+        <NiesvLogo size="md" />
         <p className="text-2xl md:text-3xl">Unable to load results.</p>
         <p className="flex items-center gap-3 text-xl text-[hsl(var(--foreground))]/60">
           <Spinner size="sm" variant="accent" label="Retrying" />
@@ -54,7 +57,8 @@ export function LivePublicResults() {
 
   if (!data) {
     return (
-      <main className="results-theme flex min-h-screen flex-col items-center justify-center gap-4 bg-[hsl(var(--background))] px-8 text-[hsl(var(--foreground))]">
+      <main className="results-theme flex min-h-screen flex-col items-center justify-center gap-6 bg-[hsl(var(--background))] px-8 text-[hsl(var(--foreground))]">
+        <NiesvLogo size="md" />
         <Spinner size="xl" variant="accent" label="Loading results" />
         <p className="text-2xl text-[hsl(var(--foreground))]/70 md:text-3xl">
           Loading results
@@ -71,15 +75,7 @@ export function LivePublicResults() {
     <main className="results-theme min-h-screen bg-[hsl(var(--background))] px-6 py-10 text-[hsl(var(--foreground))] md:px-12 md:py-14">
       <div className="h-1.5 w-full bg-[hsl(var(--gold))] shadow-lg" />
       <div className="mx-auto max-w-6xl pt-8">
-        <header className="border-b-2 border-[hsl(var(--navy-border))] pb-8">
-          <p className="text-lg font-semibold uppercase tracking-[0.2em] text-[hsl(var(--gold))] md:text-xl">
-            Nigerian Institution of Estate Surveyors and Valuers
-          </p>
-          <p className="mt-2 text-xl text-[hsl(var(--foreground))]/70 md:text-2xl">
-            Abuja Branch Election
-          </p>
-          <h1 className="mt-4 text-4xl font-bold md:text-5xl">Live Results</h1>
-
+        <ResultsBrandHeader title="Live Results">
           <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[hsl(var(--foreground))]/55 md:text-base">
             <span className="inline-flex items-center gap-2">
               <span
@@ -122,7 +118,7 @@ export function LivePublicResults() {
               </div>
             </div>
           </div>
-        </header>
+        </ResultsBrandHeader>
 
         <div className="mt-10 space-y-14">
           {data.wings.map((wing, wingIndex) => (
