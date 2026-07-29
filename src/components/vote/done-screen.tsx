@@ -32,8 +32,6 @@ export function DoneScreen({ voterName }: DoneScreenProps) {
           Your choices have been saved securely. You cannot change your vote or
           vote again in this election.
         </p>
-      </FadeIn>
-      <FadeIn delay={400}>
         <div className="mt-8 max-w-md space-y-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
           <p>
             Results will be published on this site once voting has closed.
@@ -45,9 +43,7 @@ export function DoneScreen({ voterName }: DoneScreenProps) {
             below to contact the election help desk.
           </p>
         </div>
-      </FadeIn>
-      <FadeIn delay={500}>
-        <Link href="/" className="voter-btn-secondary mt-8 px-6 py-2 text-base">
+        <Link href="/" className="voter-btn-secondary mt-8 inline-flex px-6 py-2 text-base">
           Return to home
         </Link>
       </FadeIn>
