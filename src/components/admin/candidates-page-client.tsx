@@ -3,6 +3,7 @@
 import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { AdminSelect } from "@/components/ui/admin-select";
 import { ButtonLoading } from "@/components/ui/loading-state";
 import { useConfirm } from "@/components/ui/confirm-provider";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,12 +65,26 @@ export function CandidatesPageClient() {
   const [newPositionTitles, setNewPositionTitles] = useState<
     Record<string, string>
   >({});
-  const [editingCandidate, setEditingCandidate] = useState<string | null>(null);
+
+  const [editingWingId, setEditingWingId] = useState<string | null>(null);
+  const [editWingName, setEditWingName] = useState("");
+  const [savingWing, setSavingWing] = useState(false);
+
+  const [editingPositionId, setEditingPositionId] = useState<string | null>(
+    null,
+  );
+  const [editPositionTitle, setEditPositionTitle] = useState("");
+  const [savingPosition, setSavingPosition] = useState(false);
+
+  const [editingCandidate, setEditingCandidate] = useState<string | null>(
+    null,
+  );
   const [addingCandidateFor, setAddingCandidateFor] = useState<string | null>(
     null,
   );
   const [candidateForm, setCandidateForm] =
     useState<CandidateFormState>(emptyCandidateForm);
+  const [savingCandidate, setSavingCandidate] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const refreshWings = useCallback(async () => {
@@ -83,6 +98,14 @@ export function CandidatesPageClient() {
   useEffect(() => {
     refreshWings().finally(() => setLoading(false));
   }, [refreshWings]);
+
+  function expandWing(wingId: string) {
+    setExpandedWings((prev) => new Set(prev).add(wingId));
+  }
+
+  function expandPosition(positionId: string) {
+    setExpandedPositions((prev) => new Set(prev).add(positionId));
+  }
 
   function toggleWing(id: string) {
     setExpandedWings((prev) => {
@@ -102,6 +125,12 @@ export function CandidatesPageClient() {
     });
   }
 
+  function resetCandidateFormState() {
+    setEditingCandidate(null);
+    setAddingCandidateFor(null);
+    setCandidateForm(emptyCandidateForm);
+  }
+
   async function addWing() {
     if (!newWingName.trim()) return;
     const response = await fetch("/api/admin/wings", {
@@ -117,6 +146,43 @@ export function CandidatesPageClient() {
     setNewWingName("");
     await refreshWings();
     success(`Added wing "${data.wing.name}".`);
+  }
+
+  function startEditWing(wing: Wing) {
+    setEditingWingId(wing.id);
+    setEditWingName(wing.name);
+    expandWing(wing.id);
+  }
+
+  function cancelEditWing() {
+    setEditingWingId(null);
+    setEditWingName("");
+  }
+
+  async function saveWing(wingId: string) {
+    const name = editWingName.trim();
+    if (!name) {
+      toastError("Wing name is required.");
+      return;
+    }
+
+    setSavingWing(true);
+    const response = await fetch(`/api/admin/wings/${wingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name }),
+    });
+    const data = await response.json();
+    setSavingWing(false);
+
+    if (!response.ok) {
+      toastError(data.error ?? "Could not save wing.");
+      return;
+    }
+
+    cancelEditWing();
+    await refreshWings();
+    success(`Updated wing "${name}".`);
   }
 
   async function deleteWing(id: string) {
@@ -144,6 +210,44 @@ export function CandidatesPageClient() {
 
     await refreshWings();
     success(`Removed "${wing.name}".`);
+  }
+
+  function startEditPosition(position: Position, wingId: string) {
+    setEditingPositionId(position.id);
+    setEditPositionTitle(position.title);
+    expandWing(wingId);
+    expandPosition(position.id);
+  }
+
+  function cancelEditPosition() {
+    setEditingPositionId(null);
+    setEditPositionTitle("");
+  }
+
+  async function savePosition(positionId: string) {
+    const title = editPositionTitle.trim();
+    if (!title) {
+      toastError("Position title is required.");
+      return;
+    }
+
+    setSavingPosition(true);
+    const response = await fetch(`/api/admin/positions/${positionId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    const data = await response.json();
+    setSavingPosition(false);
+
+    if (!response.ok) {
+      toastError(data.error ?? "Could not save position.");
+      return;
+    }
+
+    cancelEditPosition();
+    await refreshWings();
+    success(`Updated position "${title}".`);
   }
 
   async function handleDeletePosition(position: Position) {
@@ -194,6 +298,7 @@ export function CandidatesPageClient() {
       return;
     }
     setNewPositionTitles((prev) => ({ ...prev, [wingId]: "" }));
+    expandWing(wingId);
     await refreshWings();
     success(`Added position "${title}".`);
   }
@@ -228,15 +333,22 @@ export function CandidatesPageClient() {
     success("Photo uploaded.");
   }
 
-  function startAddCandidate(positionId: string) {
+  function startAddCandidate(positionId: string, wingId: string) {
+    resetCandidateFormState();
     setAddingCandidateFor(positionId);
-    setEditingCandidate(null);
-    setCandidateForm(emptyCandidateForm);
+    expandWing(wingId);
+    expandPosition(positionId);
   }
 
-  function startEditCandidate(candidate: Candidate) {
-    setEditingCandidate(candidate.id);
+  function startEditCandidate(
+    candidate: Candidate,
+    wingId: string,
+    positionId: string,
+  ) {
     setAddingCandidateFor(null);
+    setEditingCandidate(candidate.id);
+    expandWing(wingId);
+    expandPosition(positionId);
     setCandidateForm({
       name: candidate.name,
       bio: candidate.bio ?? "",
@@ -248,13 +360,19 @@ export function CandidatesPageClient() {
 
   async function saveCandidate(positionId: string) {
     const payload = {
-      name: candidateForm.name,
+      name: candidateForm.name.trim(),
       bio: candidateForm.bio,
       registrationNumber: candidateForm.registrationNumber,
       status: candidateForm.status,
       photoUrl: candidateForm.photoUrl || null,
     };
 
+    if (!payload.name) {
+      toastError("Candidate name is required.");
+      return;
+    }
+
+    setSavingCandidate(true);
     const isEdit = Boolean(editingCandidate);
     const response = isEdit
       ? await fetch(`/api/admin/candidates/${editingCandidate}`, {
@@ -269,14 +387,14 @@ export function CandidatesPageClient() {
         });
 
     const data = await response.json();
+    setSavingCandidate(false);
+
     if (!response.ok) {
       toastError(data.error ?? "Could not save candidate.");
       return;
     }
 
-    setEditingCandidate(null);
-    setAddingCandidateFor(null);
-    setCandidateForm(emptyCandidateForm);
+    resetCandidateFormState();
     await refreshWings();
     success(isEdit ? `Updated ${payload.name}.` : `Added ${payload.name}.`);
   }
@@ -293,93 +411,125 @@ export function CandidatesPageClient() {
     return true;
   }
 
-  function renderCandidateForm(positionId: string) {
+  function renderCandidateForm(positionId: string, mode: "add" | "edit") {
     return (
-      <div className="mt-3 space-y-3 rounded-xl border-2 border-border bg-secondary/50 p-4">
-        <div className="grid gap-3 sm:grid-cols-2">
-          <input
-            placeholder="Candidate name"
-            value={candidateForm.name}
-            onChange={(e) =>
-              setCandidateForm((prev) => ({ ...prev, name: e.target.value }))
-            }
-            className="admin-input"
-          />
-          <select
+      <div className="space-y-4 rounded-xl border-2 border-primary/20 bg-secondary/50 p-4">
+        <p className="text-sm font-semibold text-foreground">
+          {mode === "add" ? "Add candidate" : "Edit candidate"}
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor={`candidate-name-${positionId}`} className="mb-2 block text-sm font-semibold">
+              Name
+            </label>
+            <input
+              id={`candidate-name-${positionId}`}
+              placeholder="Candidate name"
+              value={candidateForm.name}
+              onChange={(e) =>
+                setCandidateForm((prev) => ({ ...prev, name: e.target.value }))
+              }
+              className="admin-input"
+            />
+          </div>
+          <AdminSelect
+            id={`candidate-status-${positionId}`}
+            label="Membership status"
             value={candidateForm.status}
+            onChange={(value) =>
+              setCandidateForm((prev) => ({
+                ...prev,
+                status: value as "FELLOW" | "MEMBER",
+              }))
+            }
+            options={[
+              { value: "MEMBER", label: "Member" },
+              { value: "FELLOW", label: "Fellow" },
+            ]}
+          />
+        </div>
+        <div>
+          <label htmlFor={`candidate-reg-${positionId}`} className="mb-2 block text-sm font-semibold">
+            Registration number <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <input
+            id={`candidate-reg-${positionId}`}
+            placeholder="Registration number"
+            value={candidateForm.registrationNumber}
             onChange={(e) =>
               setCandidateForm((prev) => ({
                 ...prev,
-                status: e.target.value as "FELLOW" | "MEMBER",
+                registrationNumber: e.target.value,
               }))
             }
             className="admin-input"
-          >
-            <option value="MEMBER">Member</option>
-            <option value="FELLOW">Fellow</option>
-          </select>
-        </div>
-        <input
-          placeholder="Registration number (optional)"
-          value={candidateForm.registrationNumber}
-          onChange={(e) =>
-            setCandidateForm((prev) => ({
-              ...prev,
-              registrationNumber: e.target.value,
-            }))
-          }
-          className="admin-input"
-        />
-        <textarea
-          placeholder="Bio (optional)"
-          value={candidateForm.bio}
-          rows={3}
-          onChange={(e) =>
-            setCandidateForm((prev) => ({ ...prev, bio: e.target.value }))
-          }
-          className="admin-input min-h-[5rem] py-2"
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="file"
-            accept="image/*"
-            disabled={uploading}
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handlePhotoUpload(file);
-            }}
-            className="text-sm"
           />
-          {uploading && (
-            <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <Spinner size="xs" variant="accent" label="Uploading photo" />
-              Uploading photo…
-            </span>
-          )}
-          {candidateForm.photoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={candidateForm.photoUrl}
-              alt=""
-              className="h-12 w-12 rounded-full object-cover"
-            />
-          )}
         </div>
-        <div className="flex gap-2">
+        <div>
+          <label htmlFor={`candidate-bio-${positionId}`} className="mb-2 block text-sm font-semibold">
+            Bio <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <textarea
+            id={`candidate-bio-${positionId}`}
+            placeholder="Short bio"
+            value={candidateForm.bio}
+            rows={3}
+            onChange={(e) =>
+              setCandidateForm((prev) => ({ ...prev, bio: e.target.value }))
+            }
+            className="admin-input min-h-[5rem] py-2"
+          />
+        </div>
+        <div>
+          <label htmlFor={`candidate-photo-${positionId}`} className="mb-2 block text-sm font-semibold">
+            Photo <span className="font-normal text-muted-foreground">(optional)</span>
+          </label>
+          <div className="flex flex-wrap items-center gap-3">
+            <input
+              id={`candidate-photo-${positionId}`}
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handlePhotoUpload(file);
+              }}
+              className="text-sm"
+            />
+            {uploading && (
+              <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+                <Spinner size="xs" variant="accent" label="Uploading photo" />
+                Uploading photo…
+              </span>
+            )}
+            {candidateForm.photoUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={candidateForm.photoUrl}
+                alt=""
+                className="h-12 w-12 rounded-full object-cover"
+              />
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            disabled={!candidateForm.name.trim()}
+            disabled={!candidateForm.name.trim() || savingCandidate}
             onClick={() => saveCandidate(positionId)}
             className="voter-btn-primary px-5 py-2 text-base"
           >
-            Save candidate
+            {savingCandidate ? (
+              <ButtonLoading label="Saving" />
+            ) : mode === "add" ? (
+              "Add candidate"
+            ) : (
+              "Save changes"
+            )}
           </button>
           <button
             type="button"
-            onClick={() => {
-              setAddingCandidateFor(null);
-              setEditingCandidate(null);
-            }}
+            onClick={resetCandidateFormState}
             className="voter-btn-secondary px-5 py-2 text-base"
           >
             Cancel
@@ -410,7 +560,8 @@ export function CandidatesPageClient() {
       <div>
         <h2 className="admin-page-title">Candidates</h2>
         <p className="admin-page-desc">
-          Manage wings, positions, and candidates.
+          Expand a wing and position to add or edit candidates. Use the Edit
+          buttons to fix names, titles, or other details.
         </p>
       </div>
 
@@ -423,7 +574,11 @@ export function CandidatesPageClient() {
             onChange={(e) => setNewWingName(e.target.value)}
             className="admin-input flex-1"
           />
-          <button type="button" onClick={addWing} className="voter-btn-primary inline-flex items-center gap-2 px-5 py-2 text-base">
+          <button
+            type="button"
+            onClick={addWing}
+            className="voter-btn-primary inline-flex items-center gap-2 px-5 py-2 text-base"
+          >
             <Plus className="h-4 w-4" />
             Add
           </button>
@@ -433,33 +588,75 @@ export function CandidatesPageClient() {
       <div className="space-y-4">
         {wings.map((wing) => (
           <div key={wing.id} className="voter-card p-0">
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <button
-                type="button"
-                onClick={() => toggleWing(wing.id)}
-                className="flex flex-1 items-center gap-2 text-left"
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 shrink-0 transition-transform duration-200",
-                    expandedWings.has(wing.id) && "rotate-90",
-                  )}
+            {editingWingId === wing.id ? (
+              <div className="space-y-3 border-b border-border px-4 py-4">
+                <p className="text-sm font-semibold">Edit wing</p>
+                <input
+                  value={editWingName}
+                  onChange={(e) => setEditWingName(e.target.value)}
+                  className="admin-input"
+                  placeholder="Wing name"
                 />
-                <span className="text-lg font-semibold">{wing.name}</span>
-                <span className="text-xs text-muted-foreground">
-                  {wing.positions.length} position(s)
-                </span>
-              </button>
-              <button
-                type="button"
-                className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-destructive"
-                onClick={() => handleDeleteWing(wing)}
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={savingWing}
+                    onClick={() => saveWing(wing.id)}
+                    className="voter-btn-primary px-4 py-2 text-base"
+                  >
+                    {savingWing ? <ButtonLoading label="Saving" /> : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditWing}
+                    className="voter-btn-secondary px-4 py-2 text-base"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                <button
+                  type="button"
+                  onClick={() => toggleWing(wing.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 shrink-0 transition-transform duration-200",
+                      expandedWings.has(wing.id) && "rotate-90",
+                    )}
+                  />
+                  <span className="truncate text-lg font-semibold">
+                    {wing.name}
+                  </span>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {wing.positions.length} position(s)
+                  </span>
+                </button>
+                <div className="flex shrink-0 gap-2">
+                  <button
+                    type="button"
+                    className="admin-action-btn"
+                    onClick={() => startEditWing(wing)}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="admin-action-btn-danger"
+                    onClick={() => handleDeleteWing(wing)}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
 
-            {expandedWings.has(wing.id) && (
+            {expandedWings.has(wing.id) && editingWingId !== wing.id && (
               <div className="border-t px-4 py-4 pl-8">
                 <div className="mb-4 flex gap-2">
                   <input
@@ -487,104 +684,170 @@ export function CandidatesPageClient() {
                     key={position.id}
                     className="mb-4 rounded-xl border-2 border-dashed border-border"
                   >
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <button
-                        type="button"
-                        onClick={() => togglePosition(position.id)}
-                        className="flex flex-1 items-center gap-2 text-left text-sm"
-                      >
-                        <ChevronRight
-                          className={cn(
-                            "h-4 w-4 shrink-0 transition-transform duration-200",
-                            expandedPositions.has(position.id) && "rotate-90",
-                          )}
+                    {editingPositionId === position.id ? (
+                      <div className="space-y-3 px-3 py-3">
+                        <p className="text-sm font-semibold">Edit position</p>
+                        <input
+                          value={editPositionTitle}
+                          onChange={(e) => setEditPositionTitle(e.target.value)}
+                          className="admin-input"
+                          placeholder="Position title"
                         />
-                        <span className="font-medium">{position.title}</span>
-                        <span className="text-xs text-muted-foreground">
-                          {position.candidates.length} candidate(s)
-                        </span>
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded p-1 text-muted-foreground hover:text-destructive"
-                        onClick={() => handleDeletePosition(position)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-
-                    {expandedPositions.has(position.id) && (
-                      <div className="space-y-2 border-t px-3 py-3">
-                        {position.candidates.map((candidate) => (
-                          <div
-                            key={candidate.id}
-                            className={cn(
-                              "flex items-start gap-3 rounded-lg border p-3 text-sm",
-                              editingCandidate === candidate.id && "border-foreground",
-                            )}
-                          >
-                            {candidate.photoUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={candidate.photoUrl}
-                                alt=""
-                                className="h-10 w-10 rounded-full object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-semibold">
-                                {candidate.name.slice(0, 2).toUpperCase()}
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium">{candidate.name}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {candidate.status} · {candidate.voteCount} votes
-                              </p>
-                              {candidate.bio && (
-                                <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
-                                  {candidate.bio}
-                                </p>
-                              )}
-                            </div>
-                            <div className="flex gap-1">
-                              <button
-                                type="button"
-                                className="rounded p-1.5 hover:bg-muted"
-                                onClick={() => startEditCandidate(candidate)}
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                className="rounded p-1.5 hover:bg-muted hover:text-destructive"
-                                onClick={() => handleDeleteCandidate(candidate)}
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-
-                        {editingCandidate &&
-                          position.candidates.some(
-                            (c) => c.id === editingCandidate,
-                          ) &&
-                          renderCandidateForm(position.id)}
-
-                        {addingCandidateFor === position.id ? (
-                          renderCandidateForm(position.id)
-                        ) : (
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() => startAddCandidate(position.id)}
-                            className="voter-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-base"
+                            disabled={savingPosition}
+                            onClick={() => savePosition(position.id)}
+                            className="voter-btn-primary px-4 py-2 text-base"
                           >
-                            <Plus className="h-4 w-4" />
-                            Add candidate
+                            {savingPosition ? (
+                              <ButtonLoading label="Saving" />
+                            ) : (
+                              "Save"
+                            )}
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            onClick={cancelEditPosition}
+                            className="voter-btn-secondary px-4 py-2 text-base"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 px-3 py-2">
+                        <button
+                          type="button"
+                          onClick={() => togglePosition(position.id)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left text-sm"
+                        >
+                          <ChevronRight
+                            className={cn(
+                              "h-4 w-4 shrink-0 transition-transform duration-200",
+                              expandedPositions.has(position.id) && "rotate-90",
+                            )}
+                          />
+                          <span className="truncate font-medium">
+                            {position.title}
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground">
+                            {position.candidates.length} candidate(s)
+                          </span>
+                        </button>
+                        <div className="flex shrink-0 gap-2">
+                          <button
+                            type="button"
+                            className="admin-action-btn"
+                            onClick={() => startEditPosition(position, wing.id)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="admin-action-btn-danger"
+                            onClick={() => handleDeletePosition(position)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     )}
+
+                    {expandedPositions.has(position.id) &&
+                      editingPositionId !== position.id && (
+                        <div className="space-y-3 border-t px-3 py-3">
+                          {position.candidates.length === 0 &&
+                            addingCandidateFor !== position.id && (
+                              <p className="text-sm text-muted-foreground">
+                                No candidates yet for this position.
+                              </p>
+                            )}
+
+                          {position.candidates.map((candidate) =>
+                            editingCandidate === candidate.id ? (
+                              <div key={candidate.id}>
+                                {renderCandidateForm(position.id, "edit")}
+                              </div>
+                            ) : (
+                              <div
+                                key={candidate.id}
+                                className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-start"
+                              >
+                                <div className="flex min-w-0 flex-1 items-start gap-3">
+                                  {candidate.photoUrl ? (
+                                    // eslint-disable-next-line @next/next/no-img-element
+                                    <img
+                                      src={candidate.photoUrl}
+                                      alt=""
+                                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                                    />
+                                  ) : (
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                                      {candidate.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="font-medium">{candidate.name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {candidate.status} · {candidate.voteCount}{" "}
+                                      votes
+                                    </p>
+                                    {candidate.bio && (
+                                      <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                                        {candidate.bio}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex shrink-0 gap-2">
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn"
+                                    onClick={() =>
+                                      startEditCandidate(
+                                        candidate,
+                                        wing.id,
+                                        position.id,
+                                      )
+                                    }
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn-danger"
+                                    onClick={() =>
+                                      handleDeleteCandidate(candidate)
+                                    }
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+                            ),
+                          )}
+
+                          {addingCandidateFor === position.id ? (
+                            renderCandidateForm(position.id, "add")
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                startAddCandidate(position.id, wing.id)
+                              }
+                              className="voter-btn-secondary inline-flex items-center gap-2 px-4 py-2 text-base"
+                            >
+                              <Plus className="h-4 w-4" />
+                              Add candidate
+                            </button>
+                          )}
+                        </div>
+                      )}
                   </div>
                 ))}
               </div>

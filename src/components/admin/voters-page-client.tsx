@@ -1,7 +1,7 @@
 "use client";
 
-import { Download, Pencil, Plus, Trash2, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { Download, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { ButtonLoading } from "@/components/ui/loading-state";
 import { useConfirm } from "@/components/ui/confirm-provider";
@@ -214,7 +214,8 @@ export function VotersPageClient() {
       <div>
         <h2 className="admin-page-title">Voters</h2>
         <p className="admin-page-desc">
-          Add voters individually, edit records, or bulk-import from CSV.
+          Add voters individually, edit records, or bulk-import from CSV. Voters
+          who have already cast a ballot are protected and cannot be deleted.
         </p>
       </div>
 
@@ -407,10 +408,16 @@ export function VotersPageClient() {
       </section>
 
       <section className="voter-card p-0">
-        <div className="border-b border-border px-6 py-4">
+        <div className="space-y-4 border-b border-border px-6 py-4">
           <h3 className="text-lg font-semibold">
             All voters ({loading ? "…" : voters.length})
           </h3>
+          <div className="admin-info-banner">
+            <strong>After a voter casts their ballot:</strong> their phone number
+            is locked, the record cannot be deleted, and only name or
+            registration number can be updated. This keeps the vote tied to the
+            correct person.
+          </div>
         </div>
         <div className="admin-table-wrap rounded-none border-0 shadow-none">
           <table className="admin-table">
@@ -419,8 +426,8 @@ export function VotersPageClient() {
                 <th>Name</th>
                 <th>Phone</th>
                 <th>Registration #</th>
-                <th>Status</th>
-                <th className="w-28">Actions</th>
+                <th className="min-w-[7rem] whitespace-nowrap">Status</th>
+                <th className="min-w-[12rem] whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -442,7 +449,19 @@ export function VotersPageClient() {
               ) : (
                 voters.map((voter) =>
                   editingId === voter.id ? (
-                    <tr key={voter.id} className="bg-secondary/30">
+                    <Fragment key={voter.id}>
+                      {voter.hasVoted && (
+                        <tr key={`${voter.id}-notice`} className="bg-secondary/20">
+                          <td colSpan={5} className="py-3">
+                            <div className="admin-edit-notice">
+                              This voter has already voted. Phone number is
+                              locked and this record cannot be deleted. You can
+                              still update their name or registration number.
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      <tr key={voter.id} className="bg-secondary/30">
                       <td>
                         <input
                           value={editForm.name}
@@ -456,22 +475,24 @@ export function VotersPageClient() {
                         />
                       </td>
                       <td>
-                        <input
-                          value={editForm.phoneNumber}
-                          onChange={(e) =>
-                            setEditForm((prev) => ({
-                              ...prev,
-                              phoneNumber: e.target.value,
-                            }))
-                          }
-                          disabled={voter.hasVoted}
-                          title={
-                            voter.hasVoted
-                              ? "Phone cannot be changed after voting"
-                              : undefined
-                          }
-                          className="admin-input font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
-                        />
+                        <div>
+                          <input
+                            value={editForm.phoneNumber}
+                            onChange={(e) =>
+                              setEditForm((prev) => ({
+                                ...prev,
+                                phoneNumber: e.target.value,
+                              }))
+                            }
+                            disabled={voter.hasVoted}
+                            className="admin-input font-mono text-sm disabled:cursor-not-allowed disabled:opacity-60"
+                          />
+                          {voter.hasVoted && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              Locked after voting
+                            </p>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <input
@@ -485,7 +506,7 @@ export function VotersPageClient() {
                           className="admin-input"
                         />
                       </td>
-                      <td>
+                      <td className="whitespace-nowrap align-middle">
                         <span
                           className={
                             voter.hasVoted
@@ -496,7 +517,7 @@ export function VotersPageClient() {
                           {voter.hasVoted ? "Voted" : "Not voted"}
                         </span>
                       </td>
-                      <td>
+                      <td className="whitespace-nowrap align-middle">
                         <div className="flex gap-1">
                           <button
                             type="button"
@@ -517,41 +538,61 @@ export function VotersPageClient() {
                         </div>
                       </td>
                     </tr>
+                    </Fragment>
                   ) : (
-                    <tr key={voter.id}>
+                    <tr
+                      key={voter.id}
+                      className={voter.hasVoted ? "bg-secondary/10" : undefined}
+                    >
                       <td>{voter.name}</td>
                       <td className="font-mono text-sm">{voter.phoneNumber}</td>
                       <td>{voter.memberRegistrationNumber}</td>
-                      <td>
-                        <span
-                          className={
-                            voter.hasVoted
-                              ? "admin-badge-success"
-                              : "admin-badge-muted"
-                          }
-                        >
-                          {voter.hasVoted ? "Voted" : "Not voted"}
-                        </span>
+                      <td className="whitespace-nowrap align-middle">
+                        <div className="flex flex-col gap-1">
+                          <span
+                            className={
+                              voter.hasVoted
+                                ? "admin-badge-success"
+                                : "admin-badge-muted"
+                            }
+                          >
+                            {voter.hasVoted ? "Voted" : "Not voted"}
+                          </span>
+                          {voter.hasVoted && (
+                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                              <Lock className="h-3 w-3 shrink-0" aria-hidden />
+                              Protected
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td>
-                        <div className="flex gap-1">
+                      <td className="whitespace-nowrap align-middle">
+                        <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => startEdit(voter)}
-                            className="rounded-lg border-2 border-border p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            aria-label={`Edit ${voter.name}`}
+                            className="admin-action-btn"
                           >
-                            <Pencil className="h-4 w-4" />
+                            <Pencil className="h-3.5 w-3.5" />
+                            {voter.hasVoted ? "Limited edit" : "Edit"}
                           </button>
-                          {!voter.hasVoted && (
+                          {voter.hasVoted ? (
+                            <span
+                              className="admin-action-btn cursor-not-allowed opacity-50"
+                              title="Cannot delete — this voter has already cast their ballot."
+                            >
+                              <Lock className="h-3.5 w-3.5" />
+                              Protected
+                            </span>
+                          ) : (
                             <button
                               type="button"
                               disabled={deletingId === voter.id}
                               onClick={() => handleDelete(voter)}
-                              className="rounded-lg border-2 border-border p-1.5 text-muted-foreground transition-colors hover:border-destructive/30 hover:bg-destructive/10 hover:text-destructive disabled:opacity-50"
-                              aria-label={`Delete ${voter.name}`}
+                              className="admin-action-btn-danger"
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="h-3.5 w-3.5" />
+                              Delete
                             </button>
                           )}
                         </div>
