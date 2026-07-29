@@ -1,3 +1,6 @@
+import Image from "next/image";
+import Link from "next/link";
+
 interface NiesvHeaderProps {
   subtitle?: string;
   actions?: React.ReactNode;
@@ -10,15 +13,27 @@ export function NiesvHeader({
   return (
     <header className="border-b-2 border-border bg-primary shadow-md">
       <div className="voter-brand-bar" />
-      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-5 sm:py-6">
-        <div className="text-center sm:text-left">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary-foreground/70 sm:text-sm">
-            Nigerian Institution of Estate Surveyors and Valuers
-          </p>
-          <p className="mt-1 text-lg font-bold text-primary-foreground sm:text-xl">
-            {subtitle}
-          </p>
-        </div>
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-4 sm:py-5">
+        <Link href="/" className="flex min-w-0 items-center gap-3 sm:gap-4">
+          <div className="shrink-0 rounded-lg bg-white p-1.5 shadow-sm">
+            <Image
+              src="/niesv-logo.png"
+              alt="NIESV Abuja Branch crest"
+              width={80}
+              height={80}
+              className="h-12 w-12 object-contain sm:h-14 sm:w-14"
+              priority
+            />
+          </div>
+          <div className="min-w-0 text-left">
+            <p className="text-sm font-semibold leading-snug text-primary-foreground sm:text-base">
+              {subtitle}
+            </p>
+            <p className="mt-0.5 hidden text-xs leading-snug text-primary-foreground/75 sm:block">
+              Nigerian Institution of Estate Surveyors and Valuers
+            </p>
+          </div>
+        </Link>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
     </header>
