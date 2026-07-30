@@ -41,16 +41,19 @@ export function CandidateCard({
         </span>
       )}
 
-      <div className="flex gap-4">
+      <div className="flex gap-5 sm:gap-6">
         {candidate.photoUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={candidate.photoUrl}
             alt=""
-            className="h-[72px] w-[72px] shrink-0 rounded-full border-2 border-border object-cover shadow-sm transition-transform duration-200"
+            className="h-28 w-28 shrink-0 rounded-full border-2 border-border object-cover shadow-md transition-transform duration-200 sm:h-36 sm:w-36"
           />
         ) : (
-          <InitialsAvatar name={candidate.name} className="h-[72px] w-[72px]" />
+          <InitialsAvatar
+            name={candidate.name}
+            className="h-28 w-28 text-2xl sm:h-36 sm:w-36 sm:text-3xl"
+          />
         )}
 
         <div className="min-w-0 flex-1 pr-10">

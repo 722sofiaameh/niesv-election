@@ -28,7 +28,7 @@ export default async function VotePage() {
   }
 
   return (
-    <VoterShell>
+    <VoterShell wide>
       <VotingFlow voterName={session.name} positions={positions} />
     </VoterShell>
   );

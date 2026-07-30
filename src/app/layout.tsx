@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Source_Sans_3 } from "next/font/google";
 
+import { VoterProviders } from "@/components/voter/voter-providers";
 import { cn } from "@/lib/utils";
 
 import "./globals.css";
@@ -30,7 +31,7 @@ export default function RootLayout({
           "voter-theme min-h-screen antialiased",
         )}
       >
-        {children}
+        <VoterProviders>{children}</VoterProviders>
       </body>
     </html>
   );

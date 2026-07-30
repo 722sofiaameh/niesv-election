@@ -24,7 +24,7 @@ export type VoteChoice = {
 export type VoteChoices = Record<string, VoteChoice>;
 
 export function formatCandidateStatus(status: CandidateStatus): string {
-  return status === "FELLOW" ? "Fellow" : "Member";
+  return status;
 }
 
 export function getInitials(name: string): string {

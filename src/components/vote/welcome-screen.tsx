@@ -18,8 +18,8 @@ export function WelcomeScreen({ voterName, onStart }: WelcomeScreenProps) {
       </FadeIn>
       <FadeIn delay={150}>
         <p className="mt-6 voter-subheading">
-          You&apos;ll go through each position one at a time. Tap a candidate,
-          confirm your choice, then move to the next.
+          Your ballot is on one page. Scroll through each position, tap your
+          choices, then submit at the bottom.
         </p>
       </FadeIn>
       <FadeIn delay={200}>

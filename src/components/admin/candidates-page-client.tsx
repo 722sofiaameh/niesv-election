@@ -11,6 +11,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
 
 import { cn } from "@/lib/utils";
+import { adminFetch } from "@/lib/admin-fetch";
 
 type Candidate = {
   id: string;
@@ -88,12 +89,15 @@ export function CandidatesPageClient() {
   const [uploading, setUploading] = useState(false);
 
   const refreshWings = useCallback(async () => {
-    const response = await fetch("/api/admin/wings");
-    const data = await response.json();
-    if (response.ok) {
-      setWings(data.wings ?? []);
+    const result = await adminFetch<{ wings: Wing[] }>("/api/admin/wings");
+    if (!result.ok) {
+      if (result.status !== 401) {
+        toastError(result.error ?? "Could not load wings.");
+      }
+      return;
     }
-  }, []);
+    setWings(result.data?.wings ?? []);
+  }, [toastError]);
 
   useEffect(() => {
     refreshWings().finally(() => setLoading(false));
@@ -133,19 +137,18 @@ export function CandidatesPageClient() {
 
   async function addWing() {
     if (!newWingName.trim()) return;
-    const response = await fetch("/api/admin/wings", {
+    const result = await adminFetch<{ wing: Wing }>("/api/admin/wings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newWingName }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      toastError(data.error ?? "Could not add wing.");
+    if (!result.ok) {
+      toastError(result.error ?? "Could not add wing.");
       return;
     }
     setNewWingName("");
     await refreshWings();
-    success(`Added wing "${data.wing.name}".`);
+    success(`Added wing "${result.data?.wing.name}".`);
   }
 
   function startEditWing(wing: Wing) {
@@ -167,16 +170,15 @@ export function CandidatesPageClient() {
     }
 
     setSavingWing(true);
-    const response = await fetch(`/api/admin/wings/${wingId}`, {
+    const result = await adminFetch<{ wing: Wing }>(`/api/admin/wings/${wingId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
     });
-    const data = await response.json();
     setSavingWing(false);
 
-    if (!response.ok) {
-      toastError(data.error ?? "Could not save wing.");
+    if (!result.ok) {
+      toastError(result.error ?? "Could not save wing.");
       return;
     }
 
@@ -186,10 +188,12 @@ export function CandidatesPageClient() {
   }
 
   async function deleteWing(id: string) {
-    const response = await fetch(`/api/admin/wings/${id}`, { method: "DELETE" });
-    if (!response.ok) {
-      const data = await response.json();
-      toastError(data.error ?? "Could not delete wing.");
+    const result = await adminFetch<{ success?: boolean }>(
+      `/api/admin/wings/${id}`,
+      { method: "DELETE" },
+    );
+    if (!result.ok) {
+      toastError(result.error ?? "Could not delete wing.");
       return false;
     }
     return true;
@@ -232,16 +236,18 @@ export function CandidatesPageClient() {
     }
 
     setSavingPosition(true);
-    const response = await fetch(`/api/admin/positions/${positionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title }),
-    });
-    const data = await response.json();
+    const result = await adminFetch<{ position: Position }>(
+      `/api/admin/positions/${positionId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      },
+    );
     setSavingPosition(false);
 
-    if (!response.ok) {
-      toastError(data.error ?? "Could not save position.");
+    if (!result.ok) {
+      toastError(result.error ?? "Could not save position.");
       return;
     }
 
@@ -287,14 +293,13 @@ export function CandidatesPageClient() {
   async function addPosition(wingId: string) {
     const title = newPositionTitles[wingId]?.trim();
     if (!title) return;
-    const response = await fetch("/api/admin/positions", {
+    const result = await adminFetch<{ position: Position }>("/api/admin/positions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ wingId, title }),
     });
-    const data = await response.json();
-    if (!response.ok) {
-      toastError(data.error ?? "Could not add position.");
+    if (!result.ok) {
+      toastError(result.error ?? "Could not add position.");
       return;
     }
     setNewPositionTitles((prev) => ({ ...prev, [wingId]: "" }));
@@ -304,12 +309,12 @@ export function CandidatesPageClient() {
   }
 
   async function deletePosition(id: string) {
-    const response = await fetch(`/api/admin/positions/${id}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      const data = await response.json();
-      toastError(data.error ?? "Could not delete position.");
+    const result = await adminFetch<{ success?: boolean }>(
+      `/api/admin/positions/${id}`,
+      { method: "DELETE" },
+    );
+    if (!result.ok) {
+      toastError(result.error ?? "Could not delete position.");
       return false;
     }
     return true;
@@ -319,17 +324,16 @@ export function CandidatesPageClient() {
     setUploading(true);
     const formData = new FormData();
     formData.append("file", file);
-    const response = await fetch("/api/admin/upload", {
+    const result = await adminFetch<{ url: string }>("/api/admin/upload", {
       method: "POST",
       body: formData,
     });
-    const data = await response.json();
     setUploading(false);
-    if (!response.ok) {
-      toastError(data.error ?? "Upload failed.");
+    if (!result.ok) {
+      toastError(result.error ?? "Upload failed.");
       return;
     }
-    setCandidateForm((prev) => ({ ...prev, photoUrl: data.url }));
+    setCandidateForm((prev) => ({ ...prev, photoUrl: result.data?.url ?? "" }));
     success("Photo uploaded.");
   }
 
@@ -374,23 +378,25 @@ export function CandidatesPageClient() {
 
     setSavingCandidate(true);
     const isEdit = Boolean(editingCandidate);
-    const response = isEdit
-      ? await fetch(`/api/admin/candidates/${editingCandidate}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        })
-      : await fetch("/api/admin/candidates", {
+    const result = isEdit
+      ? await adminFetch<{ candidate: Candidate }>(
+          `/api/admin/candidates/${editingCandidate}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+        )
+      : await adminFetch<{ candidate: Candidate }>("/api/admin/candidates", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ ...payload, positionId }),
         });
 
-    const data = await response.json();
     setSavingCandidate(false);
 
-    if (!response.ok) {
-      toastError(data.error ?? "Could not save candidate.");
+    if (!result.ok) {
+      toastError(result.error ?? "Could not save candidate.");
       return;
     }
 
@@ -400,12 +406,12 @@ export function CandidatesPageClient() {
   }
 
   async function deleteCandidate(id: string) {
-    const response = await fetch(`/api/admin/candidates/${id}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) {
-      const data = await response.json();
-      toastError(data.error ?? "Could not delete candidate.");
+    const result = await adminFetch<{ success?: boolean }>(
+      `/api/admin/candidates/${id}`,
+      { method: "DELETE" },
+    );
+    if (!result.ok) {
+      toastError(result.error ?? "Could not delete candidate.");
       return false;
     }
     return true;
@@ -443,8 +449,8 @@ export function CandidatesPageClient() {
               }))
             }
             options={[
-              { value: "MEMBER", label: "Member" },
-              { value: "FELLOW", label: "Fellow" },
+              { value: "MEMBER", label: "MEMBER" },
+              { value: "FELLOW", label: "FELLOW" },
             ]}
           />
         </div>
@@ -507,7 +513,7 @@ export function CandidatesPageClient() {
               <img
                 src={candidateForm.photoUrl}
                 alt=""
-                className="h-12 w-12 rounded-full object-cover"
+                className="h-20 w-20 rounded-full object-cover"
               />
             )}
           </div>
@@ -782,10 +788,10 @@ export function CandidatesPageClient() {
                                     <img
                                       src={candidate.photoUrl}
                                       alt=""
-                                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                                      className="h-16 w-16 shrink-0 rounded-full object-cover"
                                     />
                                   ) : (
-                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold">
+                                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-muted text-sm font-semibold">
                                       {candidate.name.slice(0, 2).toUpperCase()}
                                     </div>
                                   )}

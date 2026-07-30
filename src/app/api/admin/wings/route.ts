@@ -8,19 +8,27 @@ export async function GET() {
   const session = await requireAdminSession();
   if (!session) return unauthorizedResponse();
 
-  const wings = await prisma.wing.findMany({
-    include: {
-      positions: {
-        orderBy: { order: "asc" },
-        include: {
-          candidates: { orderBy: { name: "asc" } },
+  try {
+    const wings = await prisma.wing.findMany({
+      include: {
+        positions: {
+          orderBy: { order: "asc" },
+          include: {
+            candidates: { orderBy: { name: "asc" } },
+          },
         },
       },
-    },
-    orderBy: { name: "asc" },
-  });
+      orderBy: { name: "asc" },
+    });
 
-  return NextResponse.json({ wings });
+    return NextResponse.json({ wings });
+  } catch (error) {
+    console.error("Failed to load wings:", error);
+    return NextResponse.json(
+      { error: "Failed to load wings. Please try again." },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
