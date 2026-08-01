@@ -7,6 +7,7 @@ import { DoneScreen } from "@/components/vote/done-screen";
 import { ScrollBallotScreen } from "@/components/vote/scroll-ballot-screen";
 import { WelcomeScreen } from "@/components/vote/welcome-screen";
 import type { VoteChoices, VotingPosition } from "@/lib/voting";
+import { buildSubmitPayload } from "@/lib/voting";
 
 type VotingStep = "welcome" | "ballot" | "done";
 
@@ -19,10 +20,7 @@ export function VotingFlow({ voterName, positions }: VotingFlowProps) {
   const [step, setStep] = useState<VotingStep>("welcome");
 
   async function handleSubmit(choices: VoteChoices) {
-    const payload = positions.map((position) => ({
-      positionId: position.id,
-      candidateId: choices[position.id]?.candidateId ?? null,
-    }));
+    const payload = buildSubmitPayload(positions, choices);
 
     const response = await fetch("/api/vote/submit", {
       method: "POST",

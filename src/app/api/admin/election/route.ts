@@ -7,10 +7,21 @@ export async function GET() {
   const session = await requireAdminSession();
   if (!session) return unauthorizedResponse();
 
-  const [settings, totalVoters, votedCount] = await Promise.all([
+  const [settings, totalVoters, votedCount, wings] = await Promise.all([
     prisma.electionSettings.findFirst(),
     prisma.voter.count(),
     prisma.voter.count({ where: { hasVoted: true } }),
+    prisma.wing.findMany({
+      orderBy: { name: "asc" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        isVotingOpen: true,
+        requiresEligibility: true,
+        _count: { select: { positions: true } },
+      },
+    }),
   ]);
 
   return NextResponse.json({
@@ -19,6 +30,7 @@ export async function GET() {
       votingStartsAt: null,
       votingEndsAt: null,
       resultsArePublic: false,
+      liveTrackingForManagers: true,
     },
     turnout: {
       total: totalVoters,
@@ -27,6 +39,7 @@ export async function GET() {
         ? Math.round((votedCount / totalVoters) * 100)
         : 0,
     },
+    wings,
   });
 }
 
@@ -45,6 +58,7 @@ export async function PATCH(request: Request) {
   const data: {
     isVotingOpen?: boolean;
     resultsArePublic?: boolean;
+    liveTrackingForManagers?: boolean;
     votingStartsAt?: Date | null;
     votingEndsAt?: Date | null;
   } = {};
@@ -54,6 +68,9 @@ export async function PATCH(request: Request) {
   }
   if (typeof body.resultsArePublic === "boolean") {
     data.resultsArePublic = body.resultsArePublic;
+  }
+  if (typeof body.liveTrackingForManagers === "boolean") {
+    data.liveTrackingForManagers = body.liveTrackingForManagers;
   }
   if (body.votingStartsAt !== undefined) {
     data.votingStartsAt = body.votingStartsAt

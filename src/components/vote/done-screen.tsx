@@ -29,8 +29,8 @@ export function DoneScreen({ voterName }: DoneScreenProps) {
       )}
       <FadeIn delay={300}>
         <p className="mt-6 voter-subheading">
-          Your choices have been saved securely. You cannot change your vote or
-          vote again in this election.
+          Your choices have been saved securely. You cannot change votes you
+          have already submitted.
         </p>
         <div className="mt-8 max-w-md space-y-4 text-base leading-relaxed text-muted-foreground sm:text-lg">
           <p>

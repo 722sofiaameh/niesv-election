@@ -26,20 +26,37 @@ model Voter {
 }
 
 model Wing {
-  id     String     @id @default(cuid())
-  name   String
-  slug   String     @unique
-  positions Position[]
+  id                  String              @id @default(cuid())
+  name                String
+  slug                String              @unique
+  isVotingOpen        Boolean             @default(true)
+  requiresEligibility Boolean             @default(false)
+  positions           Position[]
+  eligibleVoters      WingEligibleVoter[]
+}
+
+model WingEligibleVoter {
+  id                       String  @id @default(cuid())
+  wingId                   String
+  name                     String?
+  phoneNumber              String
+  memberRegistrationNumber String?
+  wing                     Wing    @relation(fields: [wingId], references: [id], onDelete: Cascade)
+
+  @@unique([wingId, phoneNumber])
+  @@index([wingId])
+  @@index([memberRegistrationNumber])
 }
 
 model Position {
-  id      String      @id @default(cuid())
-  title   String
-  wingId  String
-  order   Int
-  wing    Wing        @relation(fields: [wingId], references: [id], onDelete: Cascade)
-  candidates Candidate[]
-  votes   Vote[]
+  id             String      @id @default(cuid())
+  title          String
+  wingId         String
+  order          Int
+  maxSelections  Int         @default(1)
+  wing           Wing        @relation(fields: [wingId], references: [id], onDelete: Cascade)
+  candidates     Candidate[]
+  votes          Vote[]
 
   @@index([wingId])
 }
@@ -53,6 +70,7 @@ model Candidate {
   registrationNumber String?
   status             CandidateStatus @default(MEMBER)
   voteCount          Int             @default(0)
+  trackingToken      String          @unique
   position           Position        @relation(fields: [positionId], references: [id], onDelete: Cascade)
   votes              Vote[]
 
@@ -69,17 +87,19 @@ model Vote {
   candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
   position    Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
 
-  @@unique([voterId, positionId])
+  @@unique([voterId, positionId, candidateId])
   @@index([candidateId])
   @@index([positionId])
+  @@index([voterId, positionId])
 }
 
 model ElectionSettings {
-  id                String    @id @default(cuid())
-  isVotingOpen      Boolean   @default(false)
-  votingStartsAt    DateTime?
-  votingEndsAt      DateTime?
-  resultsArePublic  Boolean   @default(false)
+  id                       String    @id @default(cuid())
+  isVotingOpen             Boolean   @default(false)
+  votingStartsAt           DateTime?
+  votingEndsAt             DateTime?
+  resultsArePublic         Boolean   @default(false)
+  liveTrackingForManagers  Boolean   @default(true)
 }
 
 model Admin {

@@ -4,23 +4,107 @@ import { requireAdminSession, unauthorizedResponse } from "@/lib/admin-auth";
 import { normalizePhoneNumber } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+const DEFAULT_PAGE_SIZE = 10;
+const MAX_PAGE_SIZE = 50;
+
+function buildVoterSearchWhere(search: string) {
+  const trimmed = search.trim();
+  if (!trimmed) return undefined;
+
+  const orConditions: Array<
+    | { name: { contains: string; mode: "insensitive" } }
+    | { memberRegistrationNumber: { contains: string; mode: "insensitive" } }
+    | { phoneNumber: { contains: string } }
+  > = [
+    { name: { contains: trimmed, mode: "insensitive" } },
+    {
+      memberRegistrationNumber: { contains: trimmed, mode: "insensitive" },
+    },
+  ];
+
+  const digits = trimmed.replace(/\D/g, "");
+  if (digits) {
+    orConditions.push({ phoneNumber: { contains: digits } });
+    const normalized = normalizePhoneNumber(trimmed);
+    if (normalized && normalized !== digits) {
+      orConditions.push({ phoneNumber: { contains: normalized } });
+    }
+  }
+
+  return { OR: orConditions };
+}
+
+export async function GET(request: Request) {
   const session = await requireAdminSession();
   if (!session) return unauthorizedResponse();
 
-  const voters = await prisma.voter.findMany({
-    orderBy: { name: "asc" },
-    select: {
-      id: true,
-      name: true,
-      phoneNumber: true,
-      memberRegistrationNumber: true,
-      hasVoted: true,
-      createdAt: true,
-    },
-  });
+  const { searchParams } = new URL(request.url);
+  const search = searchParams.get("search")?.trim() ?? "";
+  const page = Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(
+    MAX_PAGE_SIZE,
+    Math.max(
+      1,
+      Number.parseInt(searchParams.get("limit") ?? String(DEFAULT_PAGE_SIZE), 10) ||
+        DEFAULT_PAGE_SIZE,
+    ),
+  );
 
-  return NextResponse.json({ voters });
+  const where = buildVoterSearchWhere(search);
+
+  const [total, voters] = await Promise.all([
+    prisma.voter.count({ where }),
+    prisma.voter.findMany({
+      where,
+      orderBy: { name: "asc" },
+      skip: (page - 1) * limit,
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        phoneNumber: true,
+        memberRegistrationNumber: true,
+        hasVoted: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+
+  if (safePage !== page && total > 0) {
+    const adjustedVoters = await prisma.voter.findMany({
+      where,
+      orderBy: { name: "asc" },
+      skip: (safePage - 1) * limit,
+      take: limit,
+      select: {
+        id: true,
+        name: true,
+        phoneNumber: true,
+        memberRegistrationNumber: true,
+        hasVoted: true,
+        createdAt: true,
+      },
+    });
+
+    return NextResponse.json({
+      voters: adjustedVoters,
+      total,
+      page: safePage,
+      limit,
+      totalPages,
+    });
+  }
+
+  return NextResponse.json({
+    voters,
+    total,
+    page: safePage,
+    limit,
+    totalPages,
+  });
 }
 
 export async function POST(request: Request) {

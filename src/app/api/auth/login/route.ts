@@ -32,9 +32,26 @@ export async function POST(request: Request) {
     );
   }
 
-  const voter = await prisma.voter.findUnique({
-    where: { phoneNumber: normalized },
-  });
+  let voter;
+  let settings;
+
+  try {
+    [voter, settings] = await Promise.all([
+      prisma.voter.findUnique({
+        where: { phoneNumber: normalized },
+      }),
+      prisma.electionSettings.findFirst(),
+    ]);
+  } catch (error) {
+    console.error("Login database error:", error);
+    return NextResponse.json(
+      {
+        error:
+          "We could not reach the voting database. Please wait a moment and try again.",
+      },
+      { status: 503 },
+    );
+  }
 
   if (!voter) {
     return NextResponse.json(
@@ -45,13 +62,9 @@ export async function POST(request: Request) {
     );
   }
 
-  if (voter.hasVoted) {
+  if (settings && !settings.isVotingOpen) {
     return NextResponse.json(
-      {
-        error:
-          "You have already cast your vote in this election. Thank you for participating.",
-        code: "ALREADY_VOTED",
-      },
+      { error: "Voting is currently closed. Please check back later." },
       { status: 403 },
     );
   }

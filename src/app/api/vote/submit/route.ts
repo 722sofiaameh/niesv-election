@@ -2,10 +2,19 @@ import { NextResponse } from "next/server";
 
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  getEligibleRestrictedWingIds,
+  getVoterEligibilityIdentity,
+  isVoterEligibleForWing,
+} from "@/lib/wing-eligibility";
+import {
+  getPendingVotingPositions,
+  syncVoterCompletionStatus,
+} from "@/lib/voting-data";
 
 type SubmitChoice = {
   positionId: string;
-  candidateId: string | null;
+  candidateIds: string[];
 };
 
 export async function POST(request: Request) {
@@ -43,14 +52,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const positions = await prisma.position.findMany({
-    include: {
-      candidates: { select: { id: true } },
-    },
-    orderBy: [{ wing: { name: "asc" } }, { order: "asc" }],
-  });
+  const voter = await getVoterEligibilityIdentity(session.voterId);
+  if (!voter) {
+    return NextResponse.json(
+      { error: "Something went wrong. Please sign in again." },
+      { status: 401 },
+    );
+  }
 
-  if (choices.length !== positions.length) {
+  const pendingPositions = await getPendingVotingPositions(session.voterId);
+
+  if (pendingPositions.length === 0) {
+    return NextResponse.json(
+      {
+        error: "You have no open positions left to vote on.",
+        code: "ALREADY_VOTED",
+      },
+      { status: 403 },
+    );
+  }
+
+  if (choices.length !== pendingPositions.length) {
     return NextResponse.json(
       { error: "Please complete all positions before submitting." },
       { status: 400 },
@@ -58,21 +80,67 @@ export async function POST(request: Request) {
   }
 
   const positionMap = new Map(
-    positions.map((position) => [position.id, position]),
+    pendingPositions.map((position) => [position.id, position]),
+  );
+
+  const dbPositions = await prisma.position.findMany({
+    where: {
+      id: { in: pendingPositions.map((position) => position.id) },
+    },
+    include: {
+      wing: { select: { id: true, requiresEligibility: true, isVotingOpen: true } },
+      candidates: { select: { id: true } },
+    },
+  });
+
+  const dbPositionMap = new Map(
+    dbPositions.map((position) => [position.id, position]),
   );
 
   for (const choice of choices) {
-    const position = positionMap.get(choice.positionId);
-    if (!position) {
+    const position = dbPositionMap.get(choice.positionId);
+    if (!position || !position.wing.isVotingOpen) {
       return NextResponse.json(
         { error: "Something went wrong. Please start again." },
         { status: 400 },
       );
     }
 
-    if (choice.candidateId) {
+    if (!positionMap.has(choice.positionId)) {
+      return NextResponse.json(
+        { error: "Something went wrong. Please start again." },
+        { status: 400 },
+      );
+    }
+
+    const candidateIds = choice.candidateIds ?? [];
+    const uniqueIds = new Set(candidateIds);
+    if (uniqueIds.size !== candidateIds.length) {
+      return NextResponse.json(
+        { error: "Duplicate selections are not allowed for one position." },
+        { status: 400 },
+      );
+    }
+
+    if (position.maxSelections <= 1) {
+      if (candidateIds.length > 1) {
+        return NextResponse.json(
+          { error: "Please select only one candidate for this position." },
+          { status: 400 },
+        );
+      }
+    } else if (candidateIds.length !== position.maxSelections) {
+      return NextResponse.json(
+        {
+          error: `Please select exactly ${position.maxSelections} candidates for ${position.title}.`,
+        },
+        { status: 400 },
+      );
+    }
+
+    for (const candidateId of candidateIds) {
       const validCandidate = position.candidates.some(
-        (candidate) => candidate.id === choice.candidateId,
+        (candidate) => candidate.id === candidateId,
       );
       if (!validCandidate) {
         return NextResponse.json(
@@ -83,54 +151,85 @@ export async function POST(request: Request) {
     }
   }
 
+  const eligibleRestrictedWingIds = await getEligibleRestrictedWingIds(voter);
+
+  for (const choice of choices) {
+    if (choice.candidateIds.length === 0) continue;
+
+    const position = dbPositionMap.get(choice.positionId);
+    if (!position) continue;
+
+    const eligible = await isVoterEligibleForWing(voter, position.wing.id);
+    if (!eligible) {
+      return NextResponse.json(
+        {
+          error:
+            "You are not eligible to vote in one or more restricted wings.",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (
+      position.wing.requiresEligibility &&
+      !eligibleRestrictedWingIds.has(position.wing.id)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "You are not eligible to vote in one or more restricted wings.",
+        },
+        { status: 403 },
+      );
+    }
+  }
+
   try {
     await prisma.$transaction(async (tx) => {
-      const voter = await tx.voter.findUnique({
-        where: { id: session.voterId },
-        select: { hasVoted: true },
-      });
-
-      if (!voter) {
-        throw new Error("VOTER_NOT_FOUND");
-      }
-
-      if (voter.hasVoted) {
-        throw new Error("ALREADY_VOTED");
-      }
-
       for (const choice of choices) {
-        if (!choice.candidateId) continue;
+        const position = dbPositionMap.get(choice.positionId);
+        if (!position) continue;
 
-        await tx.vote.create({
-          data: {
+        const existingCount = await tx.vote.count({
+          where: {
             voterId: session.voterId,
-            candidateId: choice.candidateId,
             positionId: choice.positionId,
           },
         });
 
-        await tx.candidate.update({
-          where: { id: choice.candidateId },
-          data: { voteCount: { increment: 1 } },
-        });
-      }
+        if (position.maxSelections <= 1) {
+          if (existingCount > 0) {
+            throw new Error("ALREADY_VOTED_POSITION");
+          }
+        } else if (existingCount >= position.maxSelections) {
+          throw new Error("ALREADY_VOTED_POSITION");
+        }
 
-      const updated = await tx.voter.updateMany({
-        where: { id: session.voterId, hasVoted: false },
-        data: { hasVoted: true },
-      });
+        for (const candidateId of choice.candidateIds) {
+          await tx.vote.create({
+            data: {
+              voterId: session.voterId,
+              candidateId,
+              positionId: choice.positionId,
+            },
+          });
 
-      if (updated.count === 0) {
-        throw new Error("ALREADY_VOTED");
+          await tx.candidate.update({
+            where: { id: candidateId },
+            data: { voteCount: { increment: 1 } },
+          });
+        }
       }
     });
+
+    await syncVoterCompletionStatus(session.voterId);
   } catch (error) {
     if (error instanceof Error) {
-      if (error.message === "ALREADY_VOTED") {
+      if (error.message === "ALREADY_VOTED_POSITION") {
         return NextResponse.json(
           {
             error:
-              "Your vote has already been recorded. You cannot vote again.",
+              "Your vote has already been recorded for one of these positions.",
             code: "ALREADY_VOTED",
           },
           { status: 403 },

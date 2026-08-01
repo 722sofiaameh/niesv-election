@@ -15,7 +15,11 @@
     "db:seed": "prisma db seed",
     "db:push": "prisma db push",
     "admin:create": "tsx prisma/create-admin.ts",
-    "voters:clear": "tsx prisma/clear-voters.ts"
+    "voters:clear": "tsx prisma/clear-voters.ts",
+    "votes:clear": "tsx prisma/clear-votes.ts",
+    "branch-voters:from-pdf": "python3 prisma/extract-branch-voters-pdf.py",
+    "womens-wing:import": "tsx prisma/import-womens-wing-eligible.ts",
+    "womens-wing:sync-voters": "tsx prisma/sync-womens-wing-voters.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.0",

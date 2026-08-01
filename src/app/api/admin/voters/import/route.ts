@@ -15,6 +15,8 @@ export async function POST(request: Request) {
     action?: "validate" | "commit";
     csv?: string;
     rows?: VoterImportRow[];
+    skippedRows?: VoterImportRow[];
+    updateExisting?: boolean;
   };
 
   try {
@@ -38,7 +40,7 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "commit") {
-    if (!body.rows?.length) {
+    if (!body.rows?.length && !body.skippedRows?.length) {
       return NextResponse.json(
         { error: "No valid rows to import." },
         { status: 400 },
@@ -50,23 +52,45 @@ export async function POST(request: Request) {
     });
     const existingPhones = new Set(existing.map((voter) => voter.phoneNumber));
 
-    const toImport = body.rows.filter(
+    const toImport = (body.rows ?? []).filter(
       (row) => !existingPhones.has(row.phoneNumber),
     );
 
-    if (toImport.length === 0) {
+    let imported = 0;
+    if (toImport.length > 0) {
+      const result = await prisma.voter.createMany({
+        data: toImport,
+        skipDuplicates: true,
+      });
+      imported = result.count;
+    }
+
+    let updated = 0;
+    if (body.updateExisting && body.skippedRows?.length) {
+      for (const row of body.skippedRows) {
+        const result = await prisma.voter.updateMany({
+          where: { phoneNumber: row.phoneNumber },
+          data: {
+            name: row.name,
+            memberRegistrationNumber: row.memberRegistrationNumber,
+          },
+        });
+        updated += result.count;
+      }
+    }
+
+    if (imported === 0 && updated === 0) {
       return NextResponse.json(
-        { error: "All rows already exist in the database." },
+        { error: "Nothing to import or update." },
         { status: 400 },
       );
     }
 
-    const result = await prisma.voter.createMany({
-      data: toImport,
-      skipDuplicates: true,
+    return NextResponse.json({
+      imported,
+      updated,
+      skipped: body.skippedRows?.length ?? 0,
     });
-
-    return NextResponse.json({ imported: result.count });
   }
 
   return NextResponse.json({ error: "Invalid action." }, { status: 400 });

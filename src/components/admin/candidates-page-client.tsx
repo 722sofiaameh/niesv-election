@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronRight, Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, Link2, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminSelect } from "@/components/ui/admin-select";
@@ -12,6 +12,7 @@ import { useToast } from "@/components/ui/toast";
 
 import { cn } from "@/lib/utils";
 import { adminFetch } from "@/lib/admin-fetch";
+import { buildCampaignTrackingUrl } from "@/lib/tracking-url";
 
 type Candidate = {
   id: string;
@@ -21,12 +22,14 @@ type Candidate = {
   registrationNumber: string | null;
   status: "FELLOW" | "MEMBER";
   voteCount: number;
+  trackingToken: string;
 };
 
 type Position = {
   id: string;
   title: string;
   order: number;
+  maxSelections: number;
   candidates: Candidate[];
 };
 
@@ -75,6 +78,7 @@ export function CandidatesPageClient() {
     null,
   );
   const [editPositionTitle, setEditPositionTitle] = useState("");
+  const [editPositionMaxSelections, setEditPositionMaxSelections] = useState(1);
   const [savingPosition, setSavingPosition] = useState(false);
 
   const [editingCandidate, setEditingCandidate] = useState<string | null>(
@@ -133,6 +137,17 @@ export function CandidatesPageClient() {
     setEditingCandidate(null);
     setAddingCandidateFor(null);
     setCandidateForm(emptyCandidateForm);
+  }
+
+  async function copyTrackingLink(candidate: Candidate) {
+    const url = buildCampaignTrackingUrl(window.location.origin, candidate.trackingToken);
+
+    try {
+      await navigator.clipboard.writeText(url);
+      success(`Tracking link copied for ${candidate.name}.`);
+    } catch {
+      toastError("Could not copy link. Please copy it manually.");
+    }
   }
 
   async function addWing() {
@@ -219,6 +234,7 @@ export function CandidatesPageClient() {
   function startEditPosition(position: Position, wingId: string) {
     setEditingPositionId(position.id);
     setEditPositionTitle(position.title);
+    setEditPositionMaxSelections(position.maxSelections ?? 1);
     expandWing(wingId);
     expandPosition(position.id);
   }
@@ -226,6 +242,7 @@ export function CandidatesPageClient() {
   function cancelEditPosition() {
     setEditingPositionId(null);
     setEditPositionTitle("");
+    setEditPositionMaxSelections(1);
   }
 
   async function savePosition(positionId: string) {
@@ -235,13 +252,21 @@ export function CandidatesPageClient() {
       return;
     }
 
+    if (editPositionMaxSelections < 1 || editPositionMaxSelections > 10) {
+      toastError("Selections must be between 1 and 10.");
+      return;
+    }
+
     setSavingPosition(true);
     const result = await adminFetch<{ position: Position }>(
       `/api/admin/positions/${positionId}`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
+        body: JSON.stringify({
+          title,
+          maxSelections: editPositionMaxSelections,
+        }),
       },
     );
     setSavingPosition(false);
@@ -699,6 +724,32 @@ export function CandidatesPageClient() {
                           className="admin-input"
                           placeholder="Position title"
                         />
+                        <div>
+                          <label
+                            htmlFor={`max-selections-${position.id}`}
+                            className="mb-2 block text-sm font-semibold"
+                          >
+                            Selections per voter
+                          </label>
+                          <AdminSelect
+                            id={`max-selections-${position.id}`}
+                            value={String(editPositionMaxSelections)}
+                            onChange={(value) =>
+                              setEditPositionMaxSelections(Number(value))
+                            }
+                            options={[
+                              { value: "1", label: "1 (pick one)" },
+                              { value: "2", label: "2 (pick two)" },
+                              { value: "3", label: "3 (pick three)" },
+                              { value: "4", label: "4 (pick four — UN-OFFICIO)" },
+                              { value: "5", label: "5 (pick five)" },
+                            ]}
+                          />
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            Use 4 for UN-OFFICIO positions where voters choose
+                            four winners from the list.
+                          </p>
+                        </div>
                         <div className="flex flex-wrap gap-2">
                           <button
                             type="button"
@@ -739,6 +790,9 @@ export function CandidatesPageClient() {
                           </span>
                           <span className="shrink-0 text-xs text-muted-foreground">
                             {position.candidates.length} candidate(s)
+                            {(position.maxSelections ?? 1) > 1
+                              ? ` · pick ${position.maxSelections}`
+                              : ""}
                           </span>
                         </button>
                         <div className="flex shrink-0 gap-2">
@@ -808,7 +862,15 @@ export function CandidatesPageClient() {
                                     )}
                                   </div>
                                 </div>
-                                <div className="flex shrink-0 gap-2">
+                                <div className="flex shrink-0 flex-wrap gap-2">
+                                  <button
+                                    type="button"
+                                    className="admin-action-btn"
+                                    onClick={() => copyTrackingLink(candidate)}
+                                  >
+                                    <Link2 className="h-3.5 w-3.5" />
+                                    Copy link
+                                  </button>
                                   <button
                                     type="button"
                                     className="admin-action-btn"

@@ -11,15 +11,38 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { id } = context.params;
   const body = await request.json();
-  const title = body.title?.trim();
 
-  if (!title) {
-    return NextResponse.json({ error: "Title is required." }, { status: 400 });
+  const data: {
+    title?: string;
+    maxSelections?: number;
+  } = {};
+
+  if (body.title !== undefined) {
+    const title = body.title?.trim();
+    if (!title) {
+      return NextResponse.json({ error: "Title is required." }, { status: 400 });
+    }
+    data.title = title;
+  }
+
+  if (body.maxSelections !== undefined) {
+    const maxSelections = Number(body.maxSelections);
+    if (!Number.isInteger(maxSelections) || maxSelections < 1 || maxSelections > 10) {
+      return NextResponse.json(
+        { error: "Selections must be a whole number between 1 and 10." },
+        { status: 400 },
+      );
+    }
+    data.maxSelections = maxSelections;
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
   const position = await prisma.position.update({
     where: { id },
-    data: { title },
+    data,
   });
 
   return NextResponse.json({ position });

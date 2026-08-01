@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Lock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, Lock, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { ButtonLoading } from "@/components/ui/loading-state";
@@ -24,26 +24,38 @@ type VoterForm = {
   memberRegistrationNumber: string;
 };
 
+const PAGE_SIZE = 10;
+
 const emptyForm: VoterForm = {
   name: "",
   phoneNumber: "",
   memberRegistrationNumber: "",
 };
 
-function sortVoters(list: Voter[]) {
-  return [...list].sort((a, b) => a.name.localeCompare(b.name));
-}
+type VotersResponse = {
+  voters: Voter[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
 
 export function VotersPageClient() {
   const { success, error: toastError } = useToast();
   const confirm = useConfirm();
   const [voters, setVoters] = useState<Voter[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [csvText, setCsvText] = useState("");
   const [validation, setValidation] = useState<VoterImportValidation | null>(
     null,
   );
   const [importing, setImporting] = useState(false);
+  const [updateExisting, setUpdateExisting] = useState(true);
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [addForm, setAddForm] = useState<VoterForm>(emptyForm);
@@ -54,17 +66,43 @@ export function VotersPageClient() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const refreshVoters = useCallback(async () => {
-    const response = await fetch("/api/admin/voters");
-    const data = await response.json();
-    if (response.ok) {
-      setVoters(data.voters ?? []);
-    }
-  }, []);
+  const refreshVoters = useCallback(
+    async (opts?: { page?: number; search?: string }) => {
+      const params = new URLSearchParams();
+      params.set("page", String(opts?.page ?? page));
+      params.set("limit", String(PAGE_SIZE));
+      const query = (opts?.search ?? debouncedSearch).trim();
+      if (query) {
+        params.set("search", query);
+      }
+
+      const response = await fetch(`/api/admin/voters?${params.toString()}`);
+      const data: VotersResponse = await response.json();
+      if (response.ok) {
+        setVoters(data.voters ?? []);
+        setTotal(data.total ?? 0);
+        setPage(data.page ?? 1);
+        setTotalPages(data.totalPages ?? 1);
+      }
+    },
+    [debouncedSearch, page],
+  );
 
   useEffect(() => {
-    refreshVoters().finally(() => setLoading(false));
-  }, [refreshVoters]);
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setPage(1);
+    }, 300);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
+
+  useEffect(() => {
+    setLoading(true);
+    refreshVoters({ page, search: debouncedSearch }).finally(() =>
+      setLoading(false),
+    );
+  }, [debouncedSearch, page, refreshVoters]);
 
   async function handleValidate() {
     const response = await fetch("/api/admin/voters/import", {
@@ -79,21 +117,36 @@ export function VotersPageClient() {
       return;
     }
     setValidation(data);
-    if (data.validCount > 0) {
-      success(`${data.validCount} row(s) ready to import.`);
+    if (data.validCount > 0 || data.skippedCount > 0) {
+      const parts: string[] = [];
+      if (data.validCount > 0) {
+        parts.push(`${data.validCount} new`);
+      }
+      if (data.skippedCount > 0) {
+        parts.push(`${data.skippedCount} already registered (will skip)`);
+      }
+      success(parts.join(", ") + ".");
     } else {
-      toastError("No valid rows found. Check the errors below.");
+      toastError("No importable rows found. Check the errors below.");
     }
   }
 
   async function handleImport() {
-    if (!validation?.validRows.length) return;
+    if (!validation) return;
+    if (validation.validCount === 0 && !(updateExisting && validation.skippedCount > 0)) {
+      return;
+    }
     setImporting(true);
 
     const response = await fetch("/api/admin/voters/import", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "commit", rows: validation.validRows }),
+      body: JSON.stringify({
+        action: "commit",
+        rows: validation.validRows,
+        skippedRows: validation.skippedRows,
+        updateExisting,
+      }),
     });
     const data = await response.json();
     setImporting(false);
@@ -103,10 +156,17 @@ export function VotersPageClient() {
       return;
     }
 
-    success(`Imported ${data.imported} voter(s).`);
+    const parts: string[] = [];
+    if (data.imported > 0) parts.push(`${data.imported} added`);
+    if (data.updated > 0) parts.push(`${data.updated} updated`);
+    if (data.skipped > 0 && !updateExisting) {
+      parts.push(`${data.skipped} skipped`);
+    }
+    success(parts.length > 0 ? parts.join(", ") + "." : "Import complete.");
     setValidation(null);
     setCsvText("");
-    await refreshVoters();
+    setPage(1);
+    await refreshVoters({ page: 1, search: debouncedSearch });
   }
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -137,10 +197,11 @@ export function VotersPageClient() {
       return;
     }
 
-    setVoters((prev) => sortVoters([...prev, data.voter]));
     success(`Added ${data.voter.name}.`);
     setAddForm(emptyForm);
     setShowAddForm(false);
+    setPage(1);
+    await refreshVoters({ page: 1, search: debouncedSearch });
   }
 
   function startEdit(voter: Voter) {
@@ -174,12 +235,11 @@ export function VotersPageClient() {
     }
 
     setVoters((prev) =>
-      sortVoters(
-        prev.map((item) => (item.id === data.voter.id ? data.voter : item)),
-      ),
+      prev.map((item) => (item.id === data.voter.id ? data.voter : item)),
     );
     success(`Updated ${data.voter.name}.`);
     setEditingId(null);
+    await refreshVoters({ page, search: debouncedSearch });
   }
 
   async function handleDelete(voter: Voter) {
@@ -207,6 +267,10 @@ export function VotersPageClient() {
 
     setVoters((prev) => prev.filter((v) => v.id !== voter.id));
     success(`Removed ${voter.name}.`);
+    const nextPage =
+      voters.length === 1 && page > 1 ? page - 1 : page;
+    setPage(nextPage);
+    await refreshVoters({ page: nextPage, search: debouncedSearch });
   }
 
   return (
@@ -214,8 +278,10 @@ export function VotersPageClient() {
       <div>
         <h2 className="admin-page-title">Voters</h2>
         <p className="admin-page-desc">
-          Add voters individually, edit records, or bulk-import from CSV. Voters
-          who have already cast a ballot are protected and cannot be deleted.
+          Add voters individually, edit records, or bulk-import from CSV. Import
+          the full branch list even if it overlaps with Women&apos;s Wing — matching
+          phone numbers are skipped automatically (no duplicates). Voters who
+          have already cast a ballot are protected and cannot be deleted.
         </p>
       </div>
 
@@ -224,10 +290,13 @@ export function VotersPageClient() {
           <div>
             <h3 className="text-lg font-semibold">Bulk import</h3>
             <p className="mt-1 text-base text-muted-foreground">
-              Use the template below. Required columns:{" "}
+              Convert the branch PDF to CSV first (Excel or Google Sheets). Required
+              columns:{" "}
               <span className="font-mono text-sm">name</span>,{" "}
               <span className="font-mono text-sm">phoneNumber</span>,{" "}
-              <span className="font-mono text-sm">registrationNumber</span>
+              <span className="font-mono text-sm">registrationNumber</span>.
+              Rows already on the roll (e.g. Women&apos;s Wing) are skipped by phone
+              number.
             </p>
           </div>
           <a
@@ -258,16 +327,25 @@ export function VotersPageClient() {
 
         {validation && (
           <div className="mt-6 space-y-4">
-            <div className="flex gap-4 text-base">
-              <span className="admin-badge-success">
-                {validation.validCount} valid
-              </span>
-              <span className="inline-flex rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-sm font-medium text-destructive">
-                {validation.invalidCount} with errors
-              </span>
+            <div className="flex flex-wrap gap-4 text-base">
+              {validation.validCount > 0 && (
+                <span className="admin-badge-success">
+                  {validation.validCount} new
+                </span>
+              )}
+              {validation.skippedCount > 0 && (
+                <span className="inline-flex rounded-full border border-border bg-secondary px-3 py-1 text-sm font-medium text-foreground">
+                  {validation.skippedCount} already registered
+                </span>
+              )}
+              {validation.invalidCount > 0 && (
+                <span className="inline-flex rounded-full border border-destructive/30 bg-destructive/10 px-3 py-1 text-sm font-medium text-destructive">
+                  {validation.invalidCount} with errors
+                </span>
+              )}
             </div>
 
-            {validation.rows.some((row) => row.errors.length > 0) && (
+            {validation.rows.some((row) => row.status === "invalid") && (
               <div className="admin-table-wrap">
                 <table className="admin-table">
                   <thead>
@@ -280,7 +358,7 @@ export function VotersPageClient() {
                   </thead>
                   <tbody>
                     {validation.rows
-                      .filter((row) => row.errors.length > 0)
+                      .filter((row) => row.status === "invalid")
                       .map((row) => (
                         <tr key={row.rowNumber}>
                           <td>{row.rowNumber}</td>
@@ -296,25 +374,50 @@ export function VotersPageClient() {
               </div>
             )}
 
-            {validation.validCount > 0 && (
-              <button
-                type="button"
-                disabled={importing}
-                onClick={handleImport}
-                className="voter-btn-primary px-6 py-2 text-base"
-              >
-                {importing ? (
-                  <ButtonLoading label="Importing" />
-                ) : (
-                  `Import ${validation.validCount} voter(s)`
+            {(validation.validCount > 0 ||
+              (updateExisting && validation.skippedCount > 0)) && (
+              <div className="space-y-3">
+                {validation.skippedCount > 0 && (
+                  <label className="flex items-start gap-3 text-base">
+                    <input
+                      type="checkbox"
+                      checked={updateExisting}
+                      onChange={(event) =>
+                        setUpdateExisting(event.target.checked)
+                      }
+                      className="mt-1"
+                    />
+                    <span>
+                      Update name and registration number for{" "}
+                      {validation.skippedCount} existing voter(s) from this file
+                    </span>
+                  </label>
                 )}
-              </button>
+                <button
+                  type="button"
+                  disabled={importing}
+                  onClick={handleImport}
+                  className="voter-btn-primary px-6 py-2 text-base"
+                >
+                  {importing ? (
+                    <ButtonLoading label="Importing" />
+                  ) : validation.validCount > 0 ? (
+                    `Import ${validation.validCount} new voter(s)${
+                      updateExisting && validation.skippedCount > 0
+                        ? `, update ${validation.skippedCount} existing`
+                        : ""
+                    }`
+                  ) : (
+                    `Update ${validation.skippedCount} existing voter(s)`
+                  )}
+                </button>
+              </div>
             )}
           </div>
         )}
       </section>
 
-      <section className="voter-card">
+      <section className="border border-border rounded-lg p-4 shadow-md">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-lg font-semibold">Add voter</h3>
           {!showAddForm && (
@@ -408,10 +511,26 @@ export function VotersPageClient() {
       </section>
 
       <section className="voter-card p-0">
-        <div className="space-y-4 border-b border-border px-6 py-4">
-          <h3 className="text-lg font-semibold">
-            All voters ({loading ? "…" : voters.length})
-          </h3>
+        <div className="space-y-4 border-b border-border px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-semibold">
+              All voters ({loading ? "…" : total})
+            </h3>
+            <div className="relative w-full max-w-sm">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Search name, phone, or registration #"
+                className="admin-input w-full pl-10"
+                aria-label="Search voters"
+              />
+            </div>
+          </div>
           <div className="admin-info-banner">
             <strong>After a voter casts their ballot:</strong> their phone number
             is locked, the record cannot be deleted, and only name or
@@ -432,7 +551,7 @@ export function VotersPageClient() {
             </thead>
             <tbody>
               {loading ? (
-                Array.from({ length: 4 }).map((_, index) => (
+                Array.from({ length: PAGE_SIZE }).map((_, index) => (
                   <tr key={index}>
                     <td colSpan={5} className="py-3">
                       <Skeleton className="h-10 w-full" />
@@ -442,8 +561,9 @@ export function VotersPageClient() {
               ) : voters.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-8 text-center text-muted-foreground">
-                    No voters yet. Download the template or add a voter to get
-                    started.
+                    {debouncedSearch
+                      ? "No voters match your search."
+                      : "No voters yet. Download the template or add a voter to get started."}
                   </td>
                 </tr>
               ) : (
@@ -604,6 +724,39 @@ export function VotersPageClient() {
             </tbody>
           </table>
         </div>
+        {!loading && total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-6 py-4">
+            <p className="text-sm text-muted-foreground">
+              Showing {(page - 1) * PAGE_SIZE + 1}–
+              {Math.min(page * PAGE_SIZE, total)} of {total}
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+                className="voter-btn-secondary inline-flex items-center gap-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </button>
+              <span className="px-2 text-sm text-muted-foreground">
+                Page {page} of {totalPages}
+              </span>
+              <button
+                type="button"
+                disabled={page >= totalPages}
+                onClick={() =>
+                  setPage((current) => Math.min(totalPages, current + 1))
+                }
+                className="voter-btn-secondary inline-flex items-center gap-1 px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

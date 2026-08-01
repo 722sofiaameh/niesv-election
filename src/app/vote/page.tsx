@@ -1,10 +1,16 @@
 import { redirect } from "next/navigation";
 
 import { getSession } from "@/lib/auth";
-import { getVoterHasVoted, getVotingPositions } from "@/lib/voting-data";
+import {
+  getNoBallotReason,
+  getPendingVotingPositions,
+  syncVoterCompletionStatus,
+} from "@/lib/voting-data";
 import { DoneScreen } from "@/components/vote/done-screen";
+import { NoBallotScreen } from "@/components/vote/no-ballot-screen";
 import { VotingFlow } from "@/components/vote/voting-flow";
 import { VoterShell } from "@/components/voter/voter-shell";
+import { prisma } from "@/lib/prisma";
 
 export default async function VotePage() {
   const session = await getSession();
@@ -12,16 +18,44 @@ export default async function VotePage() {
     redirect("/login");
   }
 
-  const [hasVoted, positions] = await Promise.all([
-    getVoterHasVoted(session.voterId),
-    getVotingPositions(),
-  ]);
+  const settings = await prisma.electionSettings.findFirst();
+  if (settings && !settings.isVotingOpen) {
+    redirect("/");
+  }
 
-  if (hasVoted) {
+  let positions = await getPendingVotingPositions(session.voterId);
+
+  if (positions.length === 0) {
+    const [hasAnyVotes, reason] = await Promise.all([
+      prisma.vote.count({
+        where: { voterId: session.voterId },
+      }),
+      getNoBallotReason(session.voterId),
+    ]);
+
+    if (hasAnyVotes === 0 && reason === "unknown") {
+      positions = await getPendingVotingPositions(session.voterId);
+    }
+  }
+
+  await syncVoterCompletionStatus(session.voterId, positions);
+
+  if (positions.length === 0) {
+    const [hasAnyVotes, reason] = await Promise.all([
+      prisma.vote.count({
+        where: { voterId: session.voterId },
+      }),
+      getNoBallotReason(session.voterId),
+    ]);
+
     return (
       <VoterShell centered>
         <div className="voter-card w-full max-w-lg">
-          <DoneScreen voterName={session.name} />
+          {hasAnyVotes > 0 ? (
+            <DoneScreen voterName={session.name} />
+          ) : (
+            <NoBallotScreen voterName={session.name} reason={reason} />
+          )}
         </div>
       </VoterShell>
     );

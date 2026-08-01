@@ -11,6 +11,7 @@ const navItems = [
   { href: "/admin/election", label: "Election" },
   { href: "/admin/candidates", label: "Candidates" },
   { href: "/admin/voters", label: "Voters" },
+  { href: "/admin/wing-access", label: "Wing access" },
   { href: "/admin/results", label: "Results" },
 ];
 

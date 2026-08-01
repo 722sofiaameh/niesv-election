@@ -6,7 +6,18 @@ import { CandidateCard } from "@/components/vote/candidate-card";
 import { ButtonLoading } from "@/components/ui/loading-state";
 import { useConfirm } from "@/components/ui/confirm-provider";
 import { VotingProgress } from "@/components/vote/voting-progress";
-import type { VoteChoice, VoteChoices, VotingPosition } from "@/lib/voting";
+import type {
+  MultiVoteChoice,
+  SingleVoteChoice,
+  VoteChoice,
+  VoteChoices,
+  VotingPosition,
+} from "@/lib/voting";
+import {
+  isMultiSelectPosition,
+  isMultiVoteChoice,
+  isPositionChoiceComplete,
+} from "@/lib/voting";
 
 interface ScrollBallotScreenProps {
   voterName: string;
@@ -14,21 +25,21 @@ interface ScrollBallotScreenProps {
   onSubmit: (choices: VoteChoices) => Promise<void>;
 }
 
-interface BallotPositionSectionProps {
+interface SingleBallotSectionProps {
   position: VotingPosition;
   positionIndex: number;
   totalPositions: number;
-  choice: VoteChoice | undefined;
-  onChoiceChange: (choice: VoteChoice) => void;
+  choice: SingleVoteChoice | undefined;
+  onChoiceChange: (choice: SingleVoteChoice) => void;
 }
 
-function BallotPositionSection({
+function SingleBallotSection({
   position,
   positionIndex,
   totalPositions,
   choice,
   onChoiceChange,
-}: BallotPositionSectionProps) {
+}: SingleBallotSectionProps) {
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
   const selectedId = choice?.candidateId ?? null;
   const isSkipped = choice === null;
@@ -115,6 +126,97 @@ function BallotPositionSection({
   );
 }
 
+interface MultiBallotSectionProps {
+  position: VotingPosition;
+  positionIndex: number;
+  totalPositions: number;
+  choice: MultiVoteChoice | undefined;
+  onChoiceChange: (choice: MultiVoteChoice) => void;
+}
+
+function MultiBallotSection({
+  position,
+  positionIndex,
+  totalPositions,
+  choice,
+  onChoiceChange,
+}: MultiBallotSectionProps) {
+  const selectedIds = choice?.candidateIds ?? [];
+  const selectedSet = new Set(selectedIds);
+  const limit = position.maxSelections;
+  const isComplete = selectedIds.length === limit;
+
+  function toggleCandidate(candidateId: string, candidateName: string) {
+    if (selectedSet.has(candidateId)) {
+      const nextIds = selectedIds.filter((id) => id !== candidateId);
+      const nextNames =
+        choice?.candidateNames.filter((_, index) => selectedIds[index] !== candidateId) ?? [];
+      onChoiceChange({ candidateIds: nextIds, candidateNames: nextNames });
+      return;
+    }
+
+    if (selectedIds.length >= limit) {
+      return;
+    }
+
+    onChoiceChange({
+      candidateIds: [...selectedIds, candidateId],
+      candidateNames: [...(choice?.candidateNames ?? []), candidateName],
+    });
+  }
+
+  return (
+    <section
+      id={`position-${position.id}`}
+      className="voter-card scroll-mt-6 space-y-5"
+      aria-labelledby={`position-title-${position.id}`}
+    >
+      <div>
+        <span className="voter-progress-badge">
+          Position {positionIndex + 1} of {totalPositions}
+        </span>
+        <h2
+          id={`position-title-${position.id}`}
+          className="mt-3 text-2xl font-bold leading-snug text-foreground sm:text-3xl"
+        >
+          {position.title}
+        </h2>
+        <p className="mt-3 text-base font-medium text-muted-foreground sm:text-lg">
+          Select exactly {limit} candidate{limit === 1 ? "" : "s"} from the list
+          below.
+        </p>
+        <p
+          className={
+            isComplete
+              ? "mt-2 text-base font-semibold text-[hsl(var(--success))]"
+              : "mt-2 text-base font-semibold text-accent"
+          }
+        >
+          {selectedIds.length} of {limit} selected
+        </p>
+      </div>
+
+      <div className="space-y-4" role="list">
+        {position.candidates.map((candidate) => {
+          const selected = selectedSet.has(candidate.id);
+          const disabled = !selected && selectedIds.length >= limit;
+
+          return (
+            <div key={candidate.id} role="listitem">
+              <CandidateCard
+                candidate={candidate}
+                selected={selected}
+                disabled={disabled}
+                onSelect={() => toggleCandidate(candidate.id, candidate.name)}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 export function ScrollBallotScreen({
   voterName,
   positions,
@@ -144,26 +246,33 @@ export function ScrollBallotScreen({
     return groups;
   }, [positions]);
 
-  const answeredCount = positions.filter(
-    (position) => choices[position.id] !== undefined,
+  const answeredCount = positions.filter((position) =>
+    isPositionChoiceComplete(position, choices[position.id]),
   ).length;
   const progress =
     positions.length === 0
       ? 0
       : Math.round((answeredCount / positions.length) * 100);
 
+  function updateChoice(positionId: string, choice: VoteChoice) {
+    setChoices((prev) => ({ ...prev, [positionId]: choice }));
+  }
+
   async function handleSubmit() {
     setError("");
 
-    const unanswered = positions.filter(
-      (position) => choices[position.id] === undefined,
+    const incomplete = positions.filter(
+      (position) => !isPositionChoiceComplete(position, choices[position.id]),
     );
 
-    if (unanswered.length > 0) {
-      setError(
-        "Please select a candidate or skip every position before submitting.",
-      );
-      const first = document.getElementById(`position-${unanswered[0].id}`);
+    if (incomplete.length > 0) {
+      const firstIncomplete = incomplete[0];
+      const message = isMultiSelectPosition(firstIncomplete)
+        ? `Please select exactly ${firstIncomplete.maxSelections} candidates for every multi-select position, or complete all other positions.`
+        : "Please select a candidate or skip every position before submitting.";
+
+      setError(message);
+      const first = document.getElementById(`position-${incomplete[0].id}`);
       first?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
@@ -216,18 +325,35 @@ export function ScrollBallotScreen({
             </h2>
           </div>
 
-          {group.items.map(({ position, index }) => (
-            <BallotPositionSection
-              key={position.id}
-              position={position}
-              positionIndex={index}
-              totalPositions={positions.length}
-              choice={choices[position.id]}
-              onChoiceChange={(choice) =>
-                setChoices((prev) => ({ ...prev, [position.id]: choice }))
-              }
-            />
-          ))}
+          {group.items.map(({ position, index }) =>
+            isMultiSelectPosition(position) ? (
+              <MultiBallotSection
+                key={position.id}
+                position={position}
+                positionIndex={index}
+                totalPositions={positions.length}
+                choice={(() => {
+                  const value = choices[position.id];
+                  return isMultiVoteChoice(value) ? value : undefined;
+                })()}
+                onChoiceChange={(choice) => updateChoice(position.id, choice)}
+              />
+            ) : (
+              <SingleBallotSection
+                key={position.id}
+                position={position}
+                positionIndex={index}
+                totalPositions={positions.length}
+                choice={
+                  choices[position.id] === undefined ||
+                  isMultiVoteChoice(choices[position.id])
+                    ? undefined
+                    : (choices[position.id] as SingleVoteChoice)
+                }
+                onChoiceChange={(choice) => updateChoice(position.id, choice)}
+              />
+            ),
+          )}
         </div>
       ))}
 

@@ -12,23 +12,28 @@ import { cn } from "@/lib/utils";
 interface CandidateCardProps {
   candidate: VotingCandidate;
   selected: boolean;
+  disabled?: boolean;
   onSelect: () => void;
 }
 
 export function CandidateCard({
   candidate,
   selected,
+  disabled = false,
   onSelect,
 }: CandidateCardProps) {
   return (
     <button
       type="button"
       aria-pressed={selected}
+      disabled={disabled}
       className={cn(
         "relative w-full rounded-2xl border-2 p-5 text-left shadow-sm transition-all duration-200 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/20 active:scale-[0.99]",
         selected
           ? "border-accent bg-accent/10 shadow-md ring-2 ring-accent/30"
           : "border-border bg-card hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md",
+        disabled &&
+          "cursor-not-allowed opacity-50 hover:translate-y-0 hover:border-border hover:shadow-sm",
       )}
       onClick={onSelect}
     >

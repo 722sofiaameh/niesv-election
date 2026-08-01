@@ -17,18 +17,24 @@ John Doe,08031234567,NIESV-001
 Jane Smith,08039876543,NIESV-002
 `;
 
+export type VoterImportRowStatus = "new" | "skipped" | "invalid";
+
 export type VoterImportRowResult = {
   rowNumber: number;
   raw: Record<string, string>;
   data?: VoterImportRow;
+  status: VoterImportRowStatus;
   errors: string[];
+  skipReason?: string;
 };
 
 export type VoterImportValidation = {
   rows: VoterImportRowResult[];
   validRows: VoterImportRow[];
+  skippedRows: VoterImportRow[];
   invalidCount: number;
   validCount: number;
+  skippedCount: number;
 };
 
 function parseCsvLine(line: string): string[] {
@@ -101,12 +107,15 @@ export function validateVoterCsv(
         {
           rowNumber: 0,
           raw: {},
+          status: "invalid",
           errors: ["CSV file is empty."],
         },
       ],
       validRows: [],
+      skippedRows: [],
       invalidCount: 1,
       validCount: 0,
+      skippedCount: 0,
     };
   }
 
@@ -126,14 +135,17 @@ export function validateVoterCsv(
         {
           rowNumber: 0,
           raw: {},
+          status: "invalid",
           errors: [
             "CSV must include columns: name, phoneNumber, registrationNumber.",
           ],
         },
       ],
       validRows: [],
+      skippedRows: [],
       invalidCount: 1,
       validCount: 0,
+      skippedCount: 0,
     };
   }
 
@@ -160,6 +172,8 @@ export function validateVoterCsv(
     if (!registrationNumber) errors.push("Missing registration number.");
 
     let normalizedPhone: string | null = null;
+    let alreadyRegistered = false;
+
     if (phoneRaw) {
       normalizedPhone = normalizePhoneNumber(phoneRaw);
       if (!normalizedPhone) {
@@ -167,13 +181,22 @@ export function validateVoterCsv(
       } else if (seenPhones.has(normalizedPhone)) {
         errors.push("Duplicate phone number within this file.");
       } else if (existingPhones.has(normalizedPhone)) {
-        errors.push("Phone number already registered in the database.");
+        alreadyRegistered = true;
       }
     }
 
     if (normalizedPhone) {
       seenPhones.add(normalizedPhone);
     }
+
+    const parsedRow =
+      normalizedPhone && name && registrationNumber
+        ? {
+            name,
+            phoneNumber: normalizedPhone,
+            memberRegistrationNumber: registrationNumber,
+          }
+        : undefined;
 
     const rowResult: VoterImportRowResult = {
       rowNumber: index + 2,
@@ -182,28 +205,43 @@ export function validateVoterCsv(
         phoneNumber: phoneRaw,
         registrationNumber,
       },
+      status: "invalid",
       errors,
     };
 
-    if (errors.length === 0 && normalizedPhone) {
-      rowResult.data = {
-        name,
-        phoneNumber: normalizedPhone,
-        memberRegistrationNumber: registrationNumber,
-      };
+    if (errors.length > 0) {
+      rowResult.status = "invalid";
+    } else if (alreadyRegistered && parsedRow) {
+      rowResult.status = "skipped";
+      rowResult.skipReason =
+        "Already registered — same phone number (no duplicate will be created).";
+      rowResult.data = parsedRow;
+    } else if (parsedRow) {
+      rowResult.status = "new";
+      rowResult.data = parsedRow;
     }
 
     results.push(rowResult);
   });
 
   const validRows = results
+    .filter((row) => row.status === "new")
     .map((row) => row.data)
     .filter((row): row is VoterImportRow => Boolean(row));
+
+  const skippedRows = results
+    .filter((row) => row.status === "skipped")
+    .map((row) => row.data)
+    .filter((row): row is VoterImportRow => Boolean(row));
+
+  const invalidCount = results.filter((row) => row.status === "invalid").length;
 
   return {
     rows: results,
     validRows,
+    skippedRows,
     validCount: validRows.length,
-    invalidCount: results.length - validRows.length,
+    skippedCount: skippedRows.length,
+    invalidCount,
   };
 }

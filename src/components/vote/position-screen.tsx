@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { CandidateCard } from "@/components/vote/candidate-card";
 import type { VoteChoice, VotingPosition } from "@/lib/voting";
+import { isMultiVoteChoice } from "@/lib/voting";
 
 interface PositionScreenProps {
   position: VotingPosition;
@@ -21,7 +22,9 @@ export function PositionScreen({
   onConfirm,
 }: PositionScreenProps) {
   const [selectedId, setSelectedId] = useState<string | null>(
-    initialChoice?.candidateId ?? null,
+    initialChoice && !isMultiVoteChoice(initialChoice)
+      ? initialChoice.candidateId
+      : null,
   );
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 

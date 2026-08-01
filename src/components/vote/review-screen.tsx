@@ -6,6 +6,7 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { ButtonLoading } from "@/components/ui/loading-state";
 
 import type { VoteChoices, VotingPosition } from "@/lib/voting";
+import { isMultiVoteChoice } from "@/lib/voting";
 
 interface ReviewScreenProps {
   positions: VotingPosition[];
@@ -65,13 +66,17 @@ export function ReviewScreen({
                     {position.title}
                   </p>
                   <p className="mt-3 text-lg sm:text-xl">
-                    {choice ? (
-                      <span className="font-medium text-foreground">
-                        {choice.candidateName}
-                      </span>
-                    ) : (
+                    {!choice ? (
                       <span className="text-muted-foreground">
                         Skipped — no vote for this position
+                      </span>
+                    ) : isMultiVoteChoice(choice) ? (
+                      <span className="font-medium text-foreground">
+                        {choice.candidateNames.join(", ")}
+                      </span>
+                    ) : (
+                      <span className="font-medium text-foreground">
+                        {choice.candidateName}
                       </span>
                     )}
                   </p>

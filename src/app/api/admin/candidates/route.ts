@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 
 import { requireAdminSession, unauthorizedResponse } from "@/lib/admin-auth";
 import { prisma } from "@/lib/prisma";
+import { generateTrackingToken } from "@/lib/tracking-token";
 
 export async function POST(request: Request) {
   const session = await requireAdminSession();
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       photoUrl,
       registrationNumber,
       status,
+      trackingToken: generateTrackingToken(),
     },
   });
 

@@ -3,6 +3,8 @@ import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { generateTrackingToken } from "../src/lib/tracking-token";
+
 dotenv.config({ path: join(process.cwd(), ".env.local") });
 
 const prisma = new PrismaClient();
@@ -67,6 +69,7 @@ async function main() {
           data: {
             name: normalizeCandidateName(candidateEntry),
             positionId: position.id,
+            trackingToken: generateTrackingToken(),
           },
         });
       }

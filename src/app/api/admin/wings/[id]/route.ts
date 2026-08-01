@@ -12,15 +12,33 @@ export async function PATCH(request: Request, context: RouteContext) {
 
   const { id } = context.params;
   const body = await request.json();
-  const name = body.name?.trim();
 
-  if (!name) {
-    return NextResponse.json({ error: "Wing name is required." }, { status: 400 });
+  const data: {
+    name?: string;
+    slug?: string;
+    isVotingOpen?: boolean;
+  } = {};
+
+  if (typeof body.isVotingOpen === "boolean") {
+    data.isVotingOpen = body.isVotingOpen;
+  }
+
+  if (body.name !== undefined) {
+    const name = body.name?.trim();
+    if (!name) {
+      return NextResponse.json({ error: "Wing name is required." }, { status: 400 });
+    }
+    data.name = name;
+    data.slug = slugify(name);
+  }
+
+  if (Object.keys(data).length === 0) {
+    return NextResponse.json({ error: "No updates provided." }, { status: 400 });
   }
 
   const wing = await prisma.wing.update({
     where: { id },
-    data: { name, slug: slugify(name) },
+    data,
   });
 
   return NextResponse.json({ wing });
