@@ -7,7 +7,7 @@ config({ path: ".env" });
 import { defineConfig } from "prisma/config";
 
 // prisma generate does not connect to the DB — a placeholder is enough for install.
-// migrate deploy / runtime require the real DATABASE_URL (set in Vercel env).
+// migrate deploy uses DIRECT_URL from schema.prisma (non-pooler). Runtime uses DATABASE_URL.
 const databaseUrl =
   process.env.DATABASE_URL ??
   "postgresql://placeholder:placeholder@localhost:5432/placeholder";

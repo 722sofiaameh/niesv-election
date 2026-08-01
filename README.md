@@ -39,4 +39,13 @@ npm run dev
 
 Prisma reads `DATABASE_URL` from `.env.local` via `prisma.config.ts` (dotenv workaround).
 
+- **`DATABASE_URL`** — Neon pooler URL (used by the app at runtime)
+- **`DIRECT_URL`** — Neon direct URL, same host without `-pooler` (used only for `npm run db:deploy`)
+
+Vercel builds run `prisma generate` only. Apply migrations separately before deploy:
+
+```bash
+npm run db:deploy
+```
+
 Seed data is loaded from `prisma/data/candidates.json`.
