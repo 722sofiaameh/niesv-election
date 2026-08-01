@@ -20,6 +20,7 @@
     "votes:clear": "tsx prisma/clear-votes.ts",
     "branch-voters:from-pdf": "python3 prisma/extract-branch-voters-pdf.py",
     "womens-wing:import": "tsx prisma/import-womens-wing-eligible.ts",
+    "womens-wing:from-pdf": "python3 prisma/extract-womens-wing-pdf.py",
     "womens-wing:sync-voters": "tsx prisma/sync-womens-wing-voters.ts"
   },
   "dependencies": {
