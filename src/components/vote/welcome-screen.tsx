@@ -18,11 +18,6 @@ export function WelcomeScreen({ voterName, onStart }: WelcomeScreenProps) {
       </FadeIn>
       <FadeIn delay={150}>
         <p className="mt-6 voter-subheading">
-          You are signed in as{" "}
-          <span className="font-bold text-foreground">{voterName}</span>. If this
-          is not you, sign out immediately and contact the help desk.
-        </p>
-        <p className="mt-4 voter-subheading">
           Your ballot is on one page. Scroll through each position, tap your
           choice for each one, then submit at the bottom.
         </p>
