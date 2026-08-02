@@ -4,7 +4,7 @@ export type VotingCandidate = {
   id: string;
   name: string;
   photoUrl: string | null;
-  bio: string | null;
+  bio?: string | null;
   status: CandidateStatus;
 };
 

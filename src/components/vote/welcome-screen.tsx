@@ -19,7 +19,12 @@ export function WelcomeScreen({ voterName, onStart }: WelcomeScreenProps) {
       <FadeIn delay={150}>
         <p className="mt-6 voter-subheading">
           Your ballot is on one page. Scroll through each position, tap your
-          choices, then submit at the bottom.
+          choice for each one, then submit at the bottom.
+        </p>
+        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+          Take your time. If you need help, use{" "}
+          <span className="font-semibold text-foreground">Need help?</span> at
+          the bottom of the page.
         </p>
       </FadeIn>
       <FadeIn delay={200}>

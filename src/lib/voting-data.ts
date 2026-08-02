@@ -80,7 +80,6 @@ async function getEligibleOpenPositions(voterId: string) {
             id: true,
             name: true,
             photoUrl: true,
-            bio: true,
             status: true,
           },
         },
@@ -128,7 +127,6 @@ export async function getVotingPositions(
             id: true,
             name: true,
             photoUrl: true,
-            bio: true,
             status: true,
           },
         },
@@ -197,6 +195,86 @@ export async function syncVoterCompletionStatus(
 export async function getVoterHasVoted(voterId: string): Promise<boolean> {
   const pending = await getPendingVotingPositions(voterId);
   return pending.length === 0;
+}
+
+export type VotePageState = {
+  pendingPositions: VotingPosition[];
+  hasAnyVotes: number;
+  noBallotReason: NoBallotReason | null;
+};
+
+/** Single round-trip ballot load for the vote page — avoids duplicate queries under heavy traffic. */
+export async function getVotePageState(voterId: string): Promise<VotePageState> {
+  return withPrismaRetry(async () => {
+    const voter = await getVoterIdentity(voterId);
+    if (!voter) {
+      return {
+        pendingPositions: [],
+        hasAnyVotes: 0,
+        noBallotReason: "unknown",
+      };
+    }
+
+    const [eligibleRestrictedWingIds, positions, existingVotes, hasAnyVotes] =
+      await Promise.all([
+        getEligibleRestrictedWingIds(voter),
+        prisma.position.findMany({
+          where: { wing: { isVotingOpen: true } },
+          include: {
+            wing: {
+              select: { id: true, name: true, requiresEligibility: true },
+            },
+            candidates: {
+              orderBy: { name: "asc" },
+              select: {
+                id: true,
+                name: true,
+                photoUrl: true,
+                status: true,
+              },
+            },
+          },
+          orderBy: [{ wing: { name: "asc" } }, { order: "asc" }],
+        }),
+        prisma.vote.findMany({
+          where: { voterId },
+          select: { positionId: true },
+        }),
+        prisma.vote.count({ where: { voterId } }),
+      ]);
+
+    const eligiblePositions = positions
+      .filter((position) => {
+        if (!position.wing.requiresEligibility) {
+          return true;
+        }
+        return eligibleRestrictedWingIds.has(position.wing.id);
+      })
+      .map((position) => mapPosition(position));
+
+    const voteCounts = new Map<string, number>();
+    for (const vote of existingVotes) {
+      voteCounts.set(
+        vote.positionId,
+        (voteCounts.get(vote.positionId) ?? 0) + 1,
+      );
+    }
+
+    const pendingPositions = eligiblePositions.filter((position) =>
+      isPositionPending(position, voteCounts.get(position.id) ?? 0),
+    );
+
+    const noBallotReason =
+      pendingPositions.length === 0
+        ? await getNoBallotReason(voterId)
+        : null;
+
+    return {
+      pendingPositions,
+      hasAnyVotes,
+      noBallotReason,
+    };
+  });
 }
 
 export type NoBallotReason = "restricted_only" | "nothing_open" | "unknown";

@@ -73,7 +73,11 @@ export default function LoginPage() {
           disabled={loading || !phone.trim()}
           className="voter-btn-primary w-full"
         >
-          {loading ? <ButtonLoading label="Please wait" /> : "Continue"}
+          {loading ? (
+            <ButtonLoading label="Signing you in — please wait" />
+          ) : (
+            "Continue"
+          )}
         </button>
       </form>
     </AuthLayout>

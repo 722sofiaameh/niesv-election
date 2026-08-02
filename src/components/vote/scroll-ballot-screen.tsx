@@ -362,6 +362,10 @@ export function ScrollBallotScreen({
         <p className="text-lg text-muted-foreground">
           Check your choices above, then submit your ballot.
         </p>
+        <p className="text-base text-muted-foreground">
+          Saving may take up to a minute on slow networks — please wait and do
+          not close this page.
+        </p>
 
         {error && (
           <p role="alert" className="voter-alert-error">
@@ -376,7 +380,7 @@ export function ScrollBallotScreen({
           onClick={handleSubmit}
         >
           {submitting ? (
-            <ButtonLoading label="Submitting vote" variant="onAccent" />
+            <ButtonLoading label="Saving your vote — please wait" variant="onAccent" />
           ) : (
             "Submit My Vote"
           )}
