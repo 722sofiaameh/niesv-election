@@ -1,6 +1,17 @@
 "use client";
 
-import { ChevronLeft, ChevronRight, Download, Lock, Pencil, Plus, Search, Trash2, X } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Lock,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Fragment, useCallback, useEffect, useState } from "react";
 
 import { ButtonLoading } from "@/components/ui/loading-state";
@@ -65,6 +76,7 @@ export function VotersPageClient() {
   const [editForm, setEditForm] = useState<VoterForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [clearingId, setClearingId] = useState<string | null>(null);
 
   const refreshVoters = useCallback(
     async (opts?: { page?: number; search?: string }) => {
@@ -242,6 +254,40 @@ export function VotersPageClient() {
     await refreshVoters({ page, search: debouncedSearch });
   }
 
+  async function handleClearBallot(voter: Voter) {
+    const ok = await confirm({
+      title: "Clear this ballot?",
+      description: `All votes cast by ${voter.name} will be removed and their result totals updated. They will be able to sign in and vote again. This cannot be undone.`,
+      confirmLabel: "Clear ballot",
+      cancelLabel: "Keep ballot",
+      variant: "destructive",
+    });
+    if (!ok) return;
+
+    setClearingId(voter.id);
+
+    const response = await fetch(`/api/admin/voters/${voter.id}/ballot`, {
+      method: "DELETE",
+    });
+    const data = await response.json();
+    setClearingId(null);
+
+    if (!response.ok) {
+      toastError(data.error ?? "Could not clear ballot.");
+      return;
+    }
+
+    setVoters((prev) =>
+      prev.map((item) => (item.id === data.voter.id ? data.voter : item)),
+    );
+    success(
+      data.votesRemoved > 0
+        ? `Cleared ${data.votesRemoved} vote(s) for ${data.voter.name}. They can vote again.`
+        : `Reset voting status for ${data.voter.name}. They can vote again.`,
+    );
+    await refreshVoters({ page, search: debouncedSearch });
+  }
+
   async function handleDelete(voter: Voter) {
     const ok = await confirm({
       title: "Remove voter?",
@@ -281,7 +327,9 @@ export function VotersPageClient() {
           Add voters individually, edit records, or bulk-import from CSV. Import
           the full branch list even if it overlaps with Women&apos;s Wing — matching
           phone numbers are skipped automatically (no duplicates). Voters who
-          have already cast a ballot are protected and cannot be deleted.
+          have already cast a ballot are protected from deletion. You can clear
+          a ballot to let someone vote again (e.g. wrong selections or help-desk
+          reset).
         </p>
       </div>
 
@@ -533,9 +581,9 @@ export function VotersPageClient() {
           </div>
           <div className="admin-info-banner">
             <strong>After a voter casts their ballot:</strong> their phone number
-            is locked, the record cannot be deleted, and only name or
-            registration number can be updated. This keeps the vote tied to the
-            correct person.
+            is locked and the record cannot be deleted. Use{" "}
+            <strong>Clear ballot</strong> if they need to vote again — this
+            removes their votes from the results and resets their status.
           </div>
         </div>
         <div className="admin-table-wrap rounded-none border-0 shadow-none">
@@ -576,7 +624,8 @@ export function VotersPageClient() {
                             <div className="admin-edit-notice">
                               This voter has already voted. Phone number is
                               locked and this record cannot be deleted. You can
-                              still update their name or registration number.
+                              update their name or registration number, or use
+                              Clear ballot to let them vote again.
                             </div>
                           </td>
                         </tr>
@@ -697,13 +746,26 @@ export function VotersPageClient() {
                             {voter.hasVoted ? "Limited edit" : "Edit"}
                           </button>
                           {voter.hasVoted ? (
-                            <span
-                              className="admin-action-btn cursor-not-allowed opacity-50"
-                              title="Cannot delete — this voter has already cast their ballot."
-                            >
-                              <Lock className="h-3.5 w-3.5" />
-                              Protected
-                            </span>
+                            <>
+                              <button
+                                type="button"
+                                disabled={clearingId === voter.id}
+                                onClick={() => handleClearBallot(voter)}
+                                className="admin-action-btn-danger"
+                              >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                {clearingId === voter.id
+                                  ? "Clearing…"
+                                  : "Clear ballot"}
+                              </button>
+                              <span
+                                className="admin-action-btn cursor-not-allowed opacity-50"
+                                title="Cannot delete — this voter has already cast their ballot."
+                              >
+                                <Lock className="h-3.5 w-3.5" />
+                                Protected
+                              </span>
+                            </>
                           ) : (
                             <button
                               type="button"
