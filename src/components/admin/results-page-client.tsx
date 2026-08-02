@@ -3,6 +3,7 @@
 import { Download } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { PositionPieChart } from "@/components/results/position-pie-chart";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type Candidate = {
@@ -109,7 +110,12 @@ export function ResultsPageClient() {
                         {positionTotal} vote(s)
                       </span>
                     </div>
-                    <div className="space-y-3">
+                    <div className="grid gap-6 lg:grid-cols-[minmax(0,16rem)_1fr] lg:items-start">
+                      <PositionPieChart
+                        candidates={position.candidates}
+                        variant="admin"
+                      />
+                      <div className="space-y-3">
                       {position.candidates.length === 0 ? (
                         <p className="text-base text-muted-foreground">
                           No candidates.
@@ -144,6 +150,7 @@ export function ResultsPageClient() {
                           </div>
                         ))
                       )}
+                      </div>
                     </div>
                   </div>
                 );

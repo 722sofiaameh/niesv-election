@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { PositionChart } from "@/components/results/position-chart";
+import { PositionPieChart } from "@/components/results/position-pie-chart";
 import { ResultsBrandHeader } from "@/components/results/results-brand-header";
 import { ResultsHoldingScreen } from "@/components/results/results-holding-screen";
 import { Spinner } from "@/components/ui/spinner";
@@ -135,7 +136,13 @@ export function LivePublicResults() {
                     <h3 className="mb-6 text-2xl font-semibold text-[hsl(var(--gold))] md:text-3xl">
                       {position.title}
                     </h3>
-                    <PositionChart candidates={position.candidates} />
+                    <div className="grid gap-8 xl:grid-cols-[minmax(0,22rem)_1fr] xl:items-center">
+                      <PositionPieChart
+                        candidates={position.candidates}
+                        variant="public"
+                      />
+                      <PositionChart candidates={position.candidates} />
+                    </div>
                   </div>
                 ))}
               </div>
