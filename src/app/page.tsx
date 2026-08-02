@@ -84,7 +84,8 @@ export default async function Home() {
               1
             </span>
             <span>
-              Sign in with the phone number on your NIESV membership record.
+              Sign in with your registered phone number. We&apos;ll text you a
+              verification code to confirm it&apos;s you.
             </span>
           </li>
           <li className="flex gap-4">

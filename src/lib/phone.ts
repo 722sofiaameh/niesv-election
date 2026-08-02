@@ -23,3 +23,13 @@ export function normalizePhoneNumber(input: string): string | null {
 
   return normalized;
 }
+
+/** Masks a normalized phone for display, e.g. 2348012345678 → +234 *** *** 5678 */
+export function maskPhoneNumber(normalized: string): string {
+  if (normalized.length < 7) return "***";
+  const local = normalized.startsWith("234")
+    ? normalized.slice(3)
+    : normalized;
+  const lastFour = local.slice(-4);
+  return `+234 *** *** ${lastFour}`;
+}
