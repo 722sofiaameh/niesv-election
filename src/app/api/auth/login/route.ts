@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { createSessionToken, sessionCookieOptions } from "@/lib/auth";
 import { getSupportContact } from "@/lib/constants";
+import { sendLoginOtp } from "@/lib/otp";
 import { normalizePhoneNumber } from "@/lib/phone";
 import { prisma } from "@/lib/prisma";
 
@@ -69,21 +69,25 @@ export async function POST(request: Request) {
     );
   }
 
-  const token = await createSessionToken({
-    voterId: voter.id,
-    phoneNumber: voter.phoneNumber,
-    name: voter.name,
-  });
-
-  const response = NextResponse.json({ success: true });
-  const cookie = sessionCookieOptions(token);
-  response.cookies.set(cookie.name, cookie.value, {
-    httpOnly: cookie.httpOnly,
-    secure: cookie.secure,
-    sameSite: cookie.sameSite,
-    path: cookie.path,
-    maxAge: cookie.maxAge,
-  });
-
-  return response;
+  try {
+    const result = await sendLoginOtp(voter.id, voter.phoneNumber);
+    return NextResponse.json({
+      success: true,
+      requiresOtp: true,
+      phoneNumber: voter.phoneNumber,
+      cooldown: result.cooldown,
+      message: result.cooldown
+        ? "A code was sent recently. Please check your messages or wait a minute before requesting again."
+        : "We sent a verification code to your phone by text message.",
+    });
+  } catch (error) {
+    console.error("OTP send failed:", error);
+    return NextResponse.json(
+      {
+        error:
+          "We could not send a verification code. Please try again or contact the election help desk.",
+      },
+      { status: 503 },
+    );
+  }
 }
