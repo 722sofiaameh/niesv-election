@@ -184,46 +184,99 @@ export async function POST(request: Request) {
     }
   }
 
-  try {
-    await prisma.$transaction(async (tx) => {
-      for (const choice of choices) {
-        const position = dbPositionMap.get(choice.positionId);
-        if (!position) continue;
+  const existingVotes = await prisma.vote.findMany({
+    where: {
+      voterId: session.voterId,
+      positionId: { in: pendingPositions.map((position) => position.id) },
+    },
+    select: { positionId: true },
+  });
 
-        const existingCount = await tx.vote.count({
-          where: {
-            voterId: session.voterId,
-            positionId: choice.positionId,
+  const existingCountByPosition = new Map<string, number>();
+  for (const vote of existingVotes) {
+    existingCountByPosition.set(
+      vote.positionId,
+      (existingCountByPosition.get(vote.positionId) ?? 0) + 1,
+    );
+  }
+
+  const votesToCreate: Array<{
+    voterId: string;
+    candidateId: string;
+    positionId: string;
+  }> = [];
+  const candidateIncrements = new Map<string, number>();
+
+  for (const choice of choices) {
+    const position = dbPositionMap.get(choice.positionId);
+    if (!position) continue;
+
+    const existingCount = existingCountByPosition.get(choice.positionId) ?? 0;
+
+    if (position.maxSelections <= 1) {
+      if (existingCount > 0 && choice.candidateIds.length > 0) {
+        return NextResponse.json(
+          {
+            error:
+              "Your vote has already been recorded for one of these positions.",
+            code: "ALREADY_VOTED",
           },
-        });
+          { status: 403 },
+        );
+      }
+    } else if (
+      existingCount >= position.maxSelections &&
+      choice.candidateIds.length > 0
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Your vote has already been recorded for one of these positions.",
+          code: "ALREADY_VOTED",
+        },
+        { status: 403 },
+      );
+    }
 
-        if (position.maxSelections <= 1) {
-          if (existingCount > 0) {
-            throw new Error("ALREADY_VOTED_POSITION");
-          }
-        } else if (existingCount >= position.maxSelections) {
-          throw new Error("ALREADY_VOTED_POSITION");
+    for (const candidateId of choice.candidateIds) {
+      votesToCreate.push({
+        voterId: session.voterId,
+        candidateId,
+        positionId: choice.positionId,
+      });
+      candidateIncrements.set(
+        candidateId,
+        (candidateIncrements.get(candidateId) ?? 0) + 1,
+      );
+    }
+  }
+
+  try {
+    await prisma.$transaction(
+      async (tx) => {
+        if (votesToCreate.length > 0) {
+          await tx.vote.createMany({ data: votesToCreate });
         }
 
-        for (const candidateId of choice.candidateIds) {
-          await tx.vote.create({
-            data: {
-              voterId: session.voterId,
-              candidateId,
-              positionId: choice.positionId,
-            },
-          });
-
+        for (const [candidateId, increment] of Array.from(
+          candidateIncrements.entries(),
+        )) {
           await tx.candidate.update({
             where: { id: candidateId },
-            data: { voteCount: { increment: 1 } },
+            data: { voteCount: { increment } },
           });
         }
-      }
-    });
+      },
+      {
+        maxWait: 15_000,
+        timeout: 60_000,
+      },
+    );
 
     await syncVoterCompletionStatus(session.voterId);
   } catch (error) {
+    console.error("Vote submit failed:", error);
+
     if (error instanceof Error) {
       if (error.message === "ALREADY_VOTED_POSITION") {
         return NextResponse.json(
@@ -235,6 +288,32 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+    }
+
+    const prismaCode =
+      error && typeof error === "object" && "code" in error
+        ? String((error as { code: string }).code)
+        : null;
+
+    if (prismaCode === "P2002") {
+      return NextResponse.json(
+        {
+          error:
+            "Your vote has already been recorded for one of these positions.",
+          code: "ALREADY_VOTED",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (prismaCode === "P2024" || prismaCode === "P2028" || prismaCode === "P1001") {
+      return NextResponse.json(
+        {
+          error:
+            "The voting system is busy. Please wait a moment and try submitting again.",
+        },
+        { status: 503 },
+      );
     }
 
     return NextResponse.json(
