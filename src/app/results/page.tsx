@@ -5,6 +5,10 @@ export const metadata = {
   description: "Live election results for NIESV Abuja Branch",
 };
 
-export default function ResultsPage() {
-  return <LivePublicResults />;
+export default function ResultsPage({
+  searchParams,
+}: {
+  searchParams: { wing?: string };
+}) {
+  return <LivePublicResults wingSlug={searchParams.wing ?? null} />;
 }

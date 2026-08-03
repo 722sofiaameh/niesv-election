@@ -1,23 +1,24 @@
 import { prisma } from "@/lib/prisma";
+import {
+  filterResultsWings,
+  mapResultsWings,
+  type ResultsWing,
+  type ResultsWingOption,
+} from "@/lib/results-format";
 
-export type ResultsCandidate = {
-  id: string;
-  name: string;
-  voteCount: number;
-  status: string;
-};
+export type {
+  ResultsCandidate,
+  ResultsPosition,
+  ResultsWing,
+  ResultsWingOption,
+} from "@/lib/results-format";
 
-export type ResultsPosition = {
-  id: string;
-  title: string;
-  candidates: ResultsCandidate[];
-};
-
-export type ResultsWing = {
-  id: string;
-  name: string;
-  positions: ResultsPosition[];
-};
+export {
+  buildResultsCsv,
+  escapeResultsCsv,
+  filterResultsWings,
+  resultsCsvFilename,
+} from "@/lib/results-format";
 
 export type PublicResultsData = {
   public: true;
@@ -27,6 +28,8 @@ export type PublicResultsData = {
     percentage: number;
   };
   wings: ResultsWing[];
+  wingOptions: ResultsWingOption[];
+  wingFilter: string | null;
   updatedAt: string;
 };
 
@@ -34,7 +37,48 @@ export type PublicResultsResponse =
   | { public: false }
   | PublicResultsData;
 
-export async function getPublicResults(): Promise<PublicResultsResponse> {
+async function fetchResultsWings(): Promise<ResultsWing[]> {
+  const wings = await prisma.wing.findMany({
+    include: {
+      positions: {
+        orderBy: { order: "asc" },
+        include: {
+          candidates: {
+            orderBy: { voteCount: "desc" },
+            select: {
+              id: true,
+              name: true,
+              voteCount: true,
+              status: true,
+            },
+          },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  return mapResultsWings(wings);
+}
+
+export async function getAdminResults(
+  wingFilter?: string | null,
+): Promise<{ wings: ResultsWing[]; wingOptions: ResultsWingOption[] }> {
+  const wings = await fetchResultsWings();
+
+  return {
+    wings: filterResultsWings(wings, wingFilter),
+    wingOptions: wings.map((wing) => ({
+      id: wing.id,
+      name: wing.name,
+      slug: wing.slug,
+    })),
+  };
+}
+
+export async function getPublicResults(
+  wingFilter?: string | null,
+): Promise<PublicResultsResponse> {
   const settings = await prisma.electionSettings.findFirst();
 
   if (!settings?.resultsArePublic) {
@@ -42,28 +86,16 @@ export async function getPublicResults(): Promise<PublicResultsResponse> {
   }
 
   const [wings, totalVoters, votedCount] = await Promise.all([
-    prisma.wing.findMany({
-      include: {
-        positions: {
-          orderBy: { order: "asc" },
-          include: {
-            candidates: {
-              orderBy: { voteCount: "desc" },
-              select: {
-                id: true,
-                name: true,
-                voteCount: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: { name: "asc" },
-    }),
+    fetchResultsWings(),
     prisma.voter.count(),
     prisma.voter.count({ where: { hasVoted: true } }),
   ]);
+
+  const wingOptions = wings.map((wing) => ({
+    id: wing.id,
+    name: wing.name,
+    slug: wing.slug,
+  }));
 
   return {
     public: true,
@@ -74,15 +106,9 @@ export async function getPublicResults(): Promise<PublicResultsResponse> {
         ? Math.round((votedCount / totalVoters) * 100)
         : 0,
     },
-    wings: wings.map((wing) => ({
-      id: wing.id,
-      name: wing.name,
-      positions: wing.positions.map((position) => ({
-        id: position.id,
-        title: position.title,
-        candidates: position.candidates,
-      })),
-    })),
+    wings: filterResultsWings(wings, wingFilter),
+    wingOptions,
+    wingFilter: wingFilter?.trim() || null,
     updatedAt: new Date().toISOString(),
   };
 }

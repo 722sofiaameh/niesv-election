@@ -1,44 +1,39 @@
 "use client";
 
 import { Download } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { PositionPieChart } from "@/components/results/position-pie-chart";
 import { Skeleton } from "@/components/ui/skeleton";
-
-type Candidate = {
-  id: string;
-  name: string;
-  status: string;
-  voteCount: number;
-};
-
-type Position = {
-  id: string;
-  title: string;
-  candidates: Candidate[];
-};
-
-type Wing = {
-  id: string;
-  name: string;
-  positions: Position[];
-};
+import {
+  filterResultsWings,
+  type ResultsWing,
+  type ResultsWingOption,
+} from "@/lib/results-format";
+import { WOMENS_WING_SLUG } from "@/lib/wing-eligibility";
 
 export function ResultsPageClient() {
-  const [wings, setWings] = useState<Wing[]>([]);
+  const [allWings, setAllWings] = useState<ResultsWing[]>([]);
+  const [wingOptions, setWingOptions] = useState<ResultsWingOption[]>([]);
+  const [activeWing, setActiveWing] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/admin/results");
     const data = await response.json();
-    setWings(data.wings ?? []);
+    setAllWings(data.wings ?? []);
+    setWingOptions(data.wingOptions ?? []);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const wings = useMemo(
+    () => filterResultsWings(allWings, activeWing),
+    [allWings, activeWing],
+  );
 
   if (loading) {
     return (
@@ -65,22 +60,71 @@ export function ResultsPageClient() {
     0,
   );
 
+  const exportHref = activeWing
+    ? `/api/admin/results?format=csv&wing=${encodeURIComponent(activeWing)}`
+    : "/api/admin/results?format=csv";
+
+  const exportLabel = activeWing
+    ? `Export ${wingOptions.find((wing) => wing.slug === activeWing)?.name ?? "wing"} CSV`
+    : "Export all CSV";
+
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="admin-page-title">Results</h2>
           <p className="admin-page-desc">
-            Full breakdown by wing and position. {totalVotes} total votes cast.
+            {activeWing
+              ? `Showing ${wings.length} wing. ${totalVotes} votes in this view.`
+              : `Full breakdown by wing and position. ${totalVotes} total votes cast.`}
           </p>
         </div>
-        <a
-          href="/api/admin/results?format=csv"
-          className="voter-btn-secondary inline-flex items-center gap-2 px-5 py-2 text-base"
+        <div className="flex flex-wrap gap-2">
+          <a
+            href={exportHref}
+            className="voter-btn-secondary inline-flex items-center gap-2 px-5 py-2 text-base"
+          >
+            <Download className="h-4 w-4" />
+            {exportLabel}
+          </a>
+          {!activeWing && (
+            <a
+              href={`/api/admin/results?format=csv&wing=${WOMENS_WING_SLUG}`}
+              className="voter-btn-secondary inline-flex items-center gap-2 px-5 py-2 text-base"
+            >
+              <Download className="h-4 w-4" />
+              Export Women&apos;s Wing CSV
+            </a>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          className={
+            activeWing === null
+              ? "rounded-full border border-accent bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+              : "rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+          }
+          onClick={() => setActiveWing(null)}
         >
-          <Download className="h-4 w-4" />
-          Export CSV
-        </a>
+          All wings
+        </button>
+        {wingOptions.map((wing) => (
+          <button
+            key={wing.id}
+            type="button"
+            className={
+              activeWing === wing.slug
+                ? "rounded-full border border-accent bg-accent px-4 py-2 text-sm font-semibold text-accent-foreground"
+                : "rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-secondary"
+            }
+            onClick={() => setActiveWing(wing.slug)}
+          >
+            {wing.name}
+          </button>
+        ))}
       </div>
 
       <div className="space-y-6">
@@ -116,40 +160,40 @@ export function ResultsPageClient() {
                         variant="admin"
                       />
                       <div className="space-y-3">
-                      {position.candidates.length === 0 ? (
-                        <p className="text-base text-muted-foreground">
-                          No candidates.
-                        </p>
-                      ) : (
-                        position.candidates.map((candidate) => (
-                          <div key={candidate.id}>
-                            <div className="mb-1 flex items-center justify-between text-base">
-                              <span className="font-medium">{candidate.name}</span>
-                              <span className="font-mono text-sm">
-                                {candidate.voteCount}
-                                {positionTotal > 0 && (
-                                  <span className="ml-1 text-muted-foreground">
-                                    (
-                                    {Math.round(
-                                      (candidate.voteCount / positionTotal) *
-                                        100,
-                                    )}
-                                    %)
-                                  </span>
-                                )}
-                              </span>
+                        {position.candidates.length === 0 ? (
+                          <p className="text-base text-muted-foreground">
+                            No candidates.
+                          </p>
+                        ) : (
+                          position.candidates.map((candidate) => (
+                            <div key={candidate.id}>
+                              <div className="mb-1 flex items-center justify-between text-base">
+                                <span className="font-medium">{candidate.name}</span>
+                                <span className="font-mono text-sm">
+                                  {candidate.voteCount}
+                                  {positionTotal > 0 && (
+                                    <span className="ml-1 text-muted-foreground">
+                                      (
+                                      {Math.round(
+                                        (candidate.voteCount / positionTotal) *
+                                          100,
+                                      )}
+                                      %)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="h-2.5 overflow-hidden rounded-full bg-muted">
+                                <div
+                                  className="h-full rounded-full bg-accent transition-all"
+                                  style={{
+                                    width: `${(candidate.voteCount / maxVotes) * 100}%`,
+                                  }}
+                                />
+                              </div>
                             </div>
-                            <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-                              <div
-                                className="h-full rounded-full bg-accent transition-all"
-                                style={{
-                                  width: `${(candidate.voteCount / maxVotes) * 100}%`,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        ))
-                      )}
+                          ))
+                        )}
                       </div>
                     </div>
                   </div>

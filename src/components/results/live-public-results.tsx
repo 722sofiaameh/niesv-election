@@ -6,13 +6,18 @@ import { PositionChart } from "@/components/results/position-chart";
 import { PositionPieChart } from "@/components/results/position-pie-chart";
 import { ResultsBrandHeader } from "@/components/results/results-brand-header";
 import { ResultsHoldingScreen } from "@/components/results/results-holding-screen";
+import { ResultsWingTabs } from "@/components/results/results-wing-tabs";
 import { Spinner } from "@/components/ui/spinner";
 import { NiesvLogo } from "@/components/voter/niesv-logo";
 import type { PublicResultsResponse } from "@/lib/results-data";
 
 const POLL_INTERVAL_MS = 5000;
 
-export function LivePublicResults() {
+interface LivePublicResultsProps {
+  wingSlug?: string | null;
+}
+
+export function LivePublicResults({ wingSlug = null }: LivePublicResultsProps) {
   const [data, setData] = useState<PublicResultsResponse | null>(null);
   const [error, setError] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -21,7 +26,10 @@ export function LivePublicResults() {
   const fetchResults = useCallback(async (isPoll = false) => {
     if (isPoll) setRefreshing(true);
     try {
-      const response = await fetch("/api/results", { cache: "no-store" });
+      const url = wingSlug
+        ? `/api/results?wing=${encodeURIComponent(wingSlug)}`
+        : "/api/results";
+      const response = await fetch(url, { cache: "no-store" });
       if (!response.ok) {
         setError(true);
         return;
@@ -35,7 +43,7 @@ export function LivePublicResults() {
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [wingSlug]);
 
   useEffect(() => {
     fetchResults(false);
@@ -120,6 +128,15 @@ export function LivePublicResults() {
             </div>
           </div>
         </ResultsBrandHeader>
+
+        {data.wingOptions.length > 1 && (
+          <ResultsWingTabs
+            wingOptions={data.wingOptions}
+            activeWing={data.wingFilter}
+            hrefForWing={(slug) => (slug ? `/results?wing=${slug}` : "/results")}
+            className="mt-8"
+          />
+        )}
 
         <div className="mt-10 space-y-14">
           {data.wings.map((wing, wingIndex) => (
