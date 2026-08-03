@@ -34,6 +34,26 @@ function buildVoterSearchWhere(search: string) {
   return { OR: orConditions };
 }
 
+function mapPublicVoter(voter: {
+  id: string;
+  name: string;
+  phoneNumber: string;
+  memberRegistrationNumber: string;
+  hasVoted: boolean;
+  votingPinHash: string | null;
+  createdAt: Date;
+}) {
+  return {
+    id: voter.id,
+    name: voter.name,
+    phoneNumber: voter.phoneNumber,
+    memberRegistrationNumber: voter.memberRegistrationNumber,
+    hasVoted: voter.hasVoted,
+    hasVotingPin: Boolean(voter.votingPinHash),
+    createdAt: voter.createdAt,
+  };
+}
+
 export async function GET(request: Request) {
   const session = await requireAdminSession();
   if (!session) return unauthorizedResponse();
@@ -65,6 +85,7 @@ export async function GET(request: Request) {
         phoneNumber: true,
         memberRegistrationNumber: true,
         hasVoted: true,
+        votingPinHash: true,
         createdAt: true,
       },
     }),
@@ -85,12 +106,13 @@ export async function GET(request: Request) {
         phoneNumber: true,
         memberRegistrationNumber: true,
         hasVoted: true,
+        votingPinHash: true,
         createdAt: true,
       },
     });
 
     return NextResponse.json({
-      voters: adjustedVoters,
+      voters: adjustedVoters.map(mapPublicVoter),
       total,
       page: safePage,
       limit,
@@ -99,7 +121,7 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json({
-    voters,
+    voters: voters.map(mapPublicVoter),
     total,
     page: safePage,
     limit,

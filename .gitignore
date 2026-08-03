@@ -28,6 +28,9 @@ yarn-error.log*
 .env*.local
 .env
 
+# generated voter PIN exports (sensitive)
+voting-pins*.csv
+
 # vercel
 .vercel
 

@@ -21,7 +21,7 @@ export default async function Home() {
             <h1 className="voter-heading">Abuja Branch Election</h1>
             <p className="mt-4 voter-subheading">
               Registered NIESV members can cast their ballot online using their
-              phone number.
+              phone number and personal voting PIN.
             </p>
 
             <div className="mt-6">
@@ -84,8 +84,8 @@ export default async function Home() {
               1
             </span>
             <span>
-              Sign in with your registered phone number. We&apos;ll text you a
-              verification code to confirm it&apos;s you.
+              Sign in with your registered phone number and the voting PIN sent
+              to you by the election committee.
             </span>
           </li>
           <li className="flex gap-4">

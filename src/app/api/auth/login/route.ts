@@ -1,1 +1,1 @@
-export { POST } from "../send-otp/route";
+export { POST } from "../verify-pin/route";

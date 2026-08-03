@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Download,
+  KeyRound,
   Lock,
   Pencil,
   Plus,
@@ -27,6 +28,19 @@ type Voter = {
   phoneNumber: string;
   memberRegistrationNumber: string;
   hasVoted: boolean;
+  hasVotingPin: boolean;
+};
+
+type PinStats = {
+  total: number;
+  withPin: number;
+  withoutPin: number;
+};
+
+type IssuedPinInfo = {
+  name: string;
+  phoneNumber: string;
+  votingPin: string;
 };
 
 type VoterForm = {
@@ -77,6 +91,10 @@ export function VotersPageClient() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [clearingId, setClearingId] = useState<string | null>(null);
+  const [pinStats, setPinStats] = useState<PinStats | null>(null);
+  const [generatingPins, setGeneratingPins] = useState(false);
+  const [issuingPinId, setIssuingPinId] = useState<string | null>(null);
+  const [issuedPin, setIssuedPin] = useState<IssuedPinInfo | null>(null);
 
   const refreshVoters = useCallback(
     async (opts?: { page?: number; search?: string }) => {
@@ -99,6 +117,17 @@ export function VotersPageClient() {
     },
     [debouncedSearch, page],
   );
+
+  const refreshPinStats = useCallback(async () => {
+    const response = await fetch("/api/admin/voters/pins");
+    if (response.ok) {
+      setPinStats(await response.json());
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshPinStats();
+  }, [refreshPinStats]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -319,6 +348,84 @@ export function VotersPageClient() {
     await refreshVoters({ page: nextPage, search: debouncedSearch });
   }
 
+  async function downloadPinCsv(regenerate: boolean) {
+    if (regenerate) {
+      const confirmed = await confirm({
+        title: "Regenerate all voting PINs?",
+        description:
+          "This creates new PINs for every voter and downloads a fresh CSV. Old PINs will stop working immediately. Only do this if the previous list was lost or compromised.",
+        confirmLabel: "Regenerate & download",
+        variant: "destructive",
+      });
+      if (!confirmed) return;
+    }
+
+    setGeneratingPins(true);
+    try {
+      const response = await fetch("/api/admin/voters/pins", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ regenerate }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        toastError(data.error ?? "Could not generate voting PINs.");
+        return;
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `voting-pins-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+
+      success(
+        regenerate
+          ? "New voting PINs generated and downloaded."
+          : "Missing voting PINs generated and downloaded.",
+      );
+      await Promise.all([refreshPinStats(), refreshVoters()]);
+    } catch {
+      toastError("Could not generate voting PINs.");
+    } finally {
+      setGeneratingPins(false);
+    }
+  }
+
+  async function handleIssuePin(voter: Voter) {
+    const confirmed = await confirm({
+      title: voter.hasVotingPin ? "Replace voting PIN?" : "Issue voting PIN?",
+      description: voter.hasVotingPin
+        ? `This replaces ${voter.name}'s current PIN. The old PIN will stop working.`
+        : `Generate a one-time voting PIN for ${voter.name}. Copy it now — it cannot be shown again later.`,
+      confirmLabel: voter.hasVotingPin ? "Replace PIN" : "Issue PIN",
+    });
+    if (!confirmed) return;
+
+    setIssuingPinId(voter.id);
+    const response = await fetch(`/api/admin/voters/${voter.id}/pin`, {
+      method: "POST",
+    });
+    const data = await response.json();
+    setIssuingPinId(null);
+
+    if (!response.ok) {
+      toastError(data.error ?? "Could not issue voting PIN.");
+      return;
+    }
+
+    setIssuedPin({
+      name: data.voter.name,
+      phoneNumber: data.voter.phoneNumber,
+      votingPin: data.votingPin,
+    });
+    success(`Voting PIN issued for ${data.voter.name}.`);
+    await Promise.all([refreshPinStats(), refreshVoters()]);
+  }
+
   return (
     <div className="space-y-8">
       <div>
@@ -332,6 +439,87 @@ export function VotersPageClient() {
           reset).
         </p>
       </div>
+
+      <section className="voter-card">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="text-lg font-semibold">Voting PINs</h3>
+            <p className="mt-1 max-w-2xl text-base text-muted-foreground">
+              Generate a unique 8-character PIN for each voter. Download the
+              CSV and share PINs by WhatsApp, email, or at the help desk.
+              PINs are stored securely — this is the only time you can download
+              the full list.
+            </p>
+            {pinStats && (
+              <p className="mt-3 text-base">
+                <span className="font-semibold text-foreground">
+                  {pinStats.withPin}
+                </span>{" "}
+                of{" "}
+                <span className="font-semibold text-foreground">
+                  {pinStats.total}
+                </span>{" "}
+                voters have a PIN
+                {pinStats.withoutPin > 0 && (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    ({pinStats.withoutPin} still need one)
+                  </span>
+                )}
+                .
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={generatingPins}
+              onClick={() => void downloadPinCsv(false)}
+              className="voter-btn-primary inline-flex items-center gap-2 px-5 py-2 text-base"
+            >
+              <Download className="h-4 w-4" />
+              {generatingPins ? "Working…" : "Generate missing PINs"}
+            </button>
+            <button
+              type="button"
+              disabled={generatingPins}
+              onClick={() => void downloadPinCsv(true)}
+              className="voter-btn-secondary inline-flex items-center gap-2 px-5 py-2 text-base"
+            >
+              <RotateCcw className="h-4 w-4" />
+              Regenerate all
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {issuedPin && (
+        <section className="voter-card border-2 border-primary/30 bg-primary/5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <h3 className="text-lg font-semibold">Copy this PIN now</h3>
+              <p className="mt-1 text-base text-muted-foreground">
+                {issuedPin.name} · {issuedPin.phoneNumber}
+              </p>
+              <p className="mt-4 font-mono text-3xl font-bold tracking-[0.25em] text-foreground">
+                {issuedPin.votingPin}
+              </p>
+              <p className="mt-3 text-sm text-muted-foreground">
+                Share this with the voter. It will not be shown again after you
+                close this box.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIssuedPin(null)}
+              className="rounded-lg border-2 border-border p-2 text-muted-foreground transition-colors hover:bg-muted"
+              aria-label="Dismiss PIN"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="voter-card">
         <div className="flex flex-wrap items-start justify-between gap-4">
@@ -733,10 +921,32 @@ export function VotersPageClient() {
                               Protected
                             </span>
                           )}
+                          <span
+                            className={
+                              voter.hasVotingPin
+                                ? "admin-badge-success"
+                                : "admin-badge-muted"
+                            }
+                          >
+                            {voter.hasVotingPin ? "PIN ready" : "No PIN"}
+                          </span>
                         </div>
                       </td>
                       <td className="whitespace-nowrap align-middle">
                         <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            disabled={issuingPinId === voter.id}
+                            onClick={() => void handleIssuePin(voter)}
+                            className="admin-action-btn"
+                          >
+                            <KeyRound className="h-3.5 w-3.5" />
+                            {issuingPinId === voter.id
+                              ? "Issuing…"
+                              : voter.hasVotingPin
+                                ? "New PIN"
+                                : "Issue PIN"}
+                          </button>
                           <button
                             type="button"
                             onClick={() => startEdit(voter)}

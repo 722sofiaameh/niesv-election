@@ -21,6 +21,8 @@ model Voter {
   hasVoted                 Boolean  @default(false)
   otpCode                  String?
   otpExpiresAt             DateTime?
+  votingPinHash            String?
+  votingPinIssuedAt        DateTime?
   createdAt                DateTime @default(now())
 
   votes Vote[]

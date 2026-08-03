@@ -18,6 +18,7 @@
     "admin:create": "tsx prisma/create-admin.ts",
     "voters:clear": "tsx prisma/clear-voters.ts",
     "votes:clear": "tsx prisma/clear-votes.ts",
+    "pins:generate": "tsx prisma/generate-voting-pins.ts",
     "branch-voters:from-pdf": "python3 prisma/extract-branch-voters-pdf.py",
     "womens-wing:import": "tsx prisma/import-womens-wing-eligible.ts",
     "womens-wing:from-pdf": "python3 prisma/extract-womens-wing-pdf.py",

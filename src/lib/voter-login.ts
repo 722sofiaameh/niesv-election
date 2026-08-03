@@ -1,6 +1,33 @@
+import { NextResponse } from "next/server";
+
+import { createSessionToken, sessionCookieOptions } from "@/lib/auth";
 import { getSupportContact } from "@/lib/constants";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
+
+export async function buildVoterSessionResponse(voter: {
+  id: string;
+  phoneNumber: string;
+  name: string;
+}) {
+  const token = await createSessionToken({
+    voterId: voter.id,
+    phoneNumber: voter.phoneNumber,
+    name: voter.name,
+  });
+
+  const response = NextResponse.json({ success: true });
+  const cookie = sessionCookieOptions(token);
+  response.cookies.set(cookie.name, cookie.value, {
+    httpOnly: cookie.httpOnly,
+    secure: cookie.secure,
+    sameSite: cookie.sameSite,
+    path: cookie.path,
+    maxAge: cookie.maxAge,
+  });
+
+  return response;
+}
 
 export async function validateVoterForLogin(normalizedPhone: string) {
   const [voter, settings] = await withDbRetry(() =>
@@ -29,15 +56,4 @@ export async function validateVoterForLogin(normalizedPhone: string) {
   }
 
   return { ok: true as const, voter, settings };
-}
-
-/** Resend cooldown: 60 seconds before another OTP can be sent. */
-export const OTP_RESEND_COOLDOWN_MS = 60_000;
-
-export function getOtpResendWaitSeconds(expiresAt: Date | null): number {
-  if (!expiresAt) return 0;
-  const sentAt = expiresAt.getTime() - 5 * 60 * 1000;
-  const elapsed = Date.now() - sentAt;
-  const remaining = OTP_RESEND_COOLDOWN_MS - elapsed;
-  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
 }
