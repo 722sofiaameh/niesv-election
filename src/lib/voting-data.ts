@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import type { VotingPosition } from "@/lib/voting";
+import type { CompletedBallotEntry, VotingPosition } from "@/lib/voting";
 import { getEligibleRestrictedWingIds } from "@/lib/wing-eligibility";
 
 function isTransientPrismaError(error: unknown): boolean {
@@ -199,9 +199,45 @@ export async function getVoterHasVoted(voterId: string): Promise<boolean> {
 
 export type VotePageState = {
   pendingPositions: VotingPosition[];
+  completedBallot: CompletedBallotEntry[];
   hasAnyVotes: number;
   noBallotReason: NoBallotReason | null;
 };
+
+function buildCompletedBallot(
+  eligiblePositions: VotingPosition[],
+  pendingPositions: VotingPosition[],
+  votes: Array<{
+    positionId: string;
+    candidate: VotingPosition["candidates"][number];
+  }>,
+): CompletedBallotEntry[] {
+  const pendingIds = new Set(pendingPositions.map((position) => position.id));
+  const votesByPosition = new Map<
+    string,
+    VotingPosition["candidates"][number][]
+  >();
+
+  for (const vote of votes) {
+    const existing = votesByPosition.get(vote.positionId) ?? [];
+    existing.push(vote.candidate);
+    votesByPosition.set(vote.positionId, existing);
+  }
+
+  return eligiblePositions
+    .filter(
+      (position) =>
+        !pendingIds.has(position.id) &&
+        (votesByPosition.get(position.id)?.length ?? 0) > 0,
+    )
+    .map((position) => ({
+      positionId: position.id,
+      title: position.title,
+      wingName: position.wingName,
+      maxSelections: position.maxSelections,
+      selectedCandidates: votesByPosition.get(position.id) ?? [],
+    }));
+}
 
 /** Single round-trip ballot load for the vote page — avoids duplicate queries under heavy traffic. */
 export async function getVotePageState(voterId: string): Promise<VotePageState> {
@@ -210,6 +246,7 @@ export async function getVotePageState(voterId: string): Promise<VotePageState> 
     if (!voter) {
       return {
         pendingPositions: [],
+        completedBallot: [],
         hasAnyVotes: 0,
         noBallotReason: "unknown",
       };
@@ -238,7 +275,18 @@ export async function getVotePageState(voterId: string): Promise<VotePageState> 
         }),
         prisma.vote.findMany({
           where: { voterId },
-          select: { positionId: true },
+          select: {
+            positionId: true,
+            candidate: {
+              select: {
+                id: true,
+                name: true,
+                photoUrl: true,
+                status: true,
+              },
+            },
+          },
+          orderBy: { castAt: "asc" },
         }),
         prisma.vote.count({ where: { voterId } }),
       ]);
@@ -264,6 +312,12 @@ export async function getVotePageState(voterId: string): Promise<VotePageState> 
       isPositionPending(position, voteCounts.get(position.id) ?? 0),
     );
 
+    const completedBallot = buildCompletedBallot(
+      eligiblePositions,
+      pendingPositions,
+      existingVotes,
+    );
+
     const noBallotReason =
       pendingPositions.length === 0
         ? await getNoBallotReason(voterId)
@@ -271,6 +325,7 @@ export async function getVotePageState(voterId: string): Promise<VotePageState> 
 
     return {
       pendingPositions,
+      completedBallot,
       hasAnyVotes,
       noBallotReason,
     };

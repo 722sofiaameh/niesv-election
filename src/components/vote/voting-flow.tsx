@@ -6,7 +6,11 @@ import { FadeIn } from "@/components/ui/fade-in";
 import { DoneScreen } from "@/components/vote/done-screen";
 import { ScrollBallotScreen } from "@/components/vote/scroll-ballot-screen";
 import { WelcomeScreen } from "@/components/vote/welcome-screen";
-import type { VoteChoices, VotingPosition } from "@/lib/voting";
+import type {
+  CompletedBallotEntry,
+  VoteChoices,
+  VotingPosition,
+} from "@/lib/voting";
 import { buildSubmitPayload } from "@/lib/voting";
 
 type VotingStep = "welcome" | "ballot" | "done";
@@ -14,9 +18,14 @@ type VotingStep = "welcome" | "ballot" | "done";
 interface VotingFlowProps {
   voterName: string;
   positions: VotingPosition[];
+  completedBallot?: CompletedBallotEntry[];
 }
 
-export function VotingFlow({ voterName, positions }: VotingFlowProps) {
+export function VotingFlow({
+  voterName,
+  positions,
+  completedBallot = [],
+}: VotingFlowProps) {
   const [step, setStep] = useState<VotingStep>("welcome");
 
   async function handleSubmit(choices: VoteChoices) {
@@ -56,7 +65,12 @@ export function VotingFlow({ voterName, positions }: VotingFlowProps) {
   if (step === "welcome") {
     return (
       <FadeIn key="welcome" variant="scale">
-        <WelcomeScreen voterName={voterName} onStart={() => setStep("ballot")} />
+        <WelcomeScreen
+          voterName={voterName}
+          completedCount={completedBallot.length}
+          pendingCount={positions.length}
+          onStart={() => setStep("ballot")}
+        />
       </FadeIn>
     );
   }
@@ -73,6 +87,7 @@ export function VotingFlow({ voterName, positions }: VotingFlowProps) {
     <ScrollBallotScreen
       voterName={voterName}
       positions={positions}
+      completedBallot={completedBallot}
       onSubmit={handleSubmit}
     />
   );

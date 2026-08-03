@@ -21,7 +21,7 @@ export default async function VotePage() {
     redirect("/");
   }
 
-  let { pendingPositions, hasAnyVotes, noBallotReason } =
+  let { pendingPositions, completedBallot, hasAnyVotes, noBallotReason } =
     await getVotePageState(session.voterId);
 
   if (
@@ -29,7 +29,7 @@ export default async function VotePage() {
     hasAnyVotes === 0 &&
     noBallotReason === "unknown"
   ) {
-    ({ pendingPositions, hasAnyVotes, noBallotReason } =
+    ({ pendingPositions, completedBallot, hasAnyVotes, noBallotReason } =
       await getVotePageState(session.voterId));
   }
 
@@ -52,7 +52,11 @@ export default async function VotePage() {
 
   return (
     <VoterShell wide>
-      <VotingFlow voterName={session.name} positions={pendingPositions} />
+      <VotingFlow
+        voterName={session.name}
+        positions={pendingPositions}
+        completedBallot={completedBallot}
+      />
     </VoterShell>
   );
 }

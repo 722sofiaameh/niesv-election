@@ -3,10 +3,12 @@
 import { useMemo, useState } from "react";
 
 import { CandidateCard } from "@/components/vote/candidate-card";
+import { CompletedVotesSection } from "@/components/vote/completed-votes-section";
 import { ButtonLoading } from "@/components/ui/loading-state";
 import { useConfirm } from "@/components/ui/confirm-provider";
 import { VotingProgress } from "@/components/vote/voting-progress";
 import type {
+  CompletedBallotEntry,
   MultiVoteChoice,
   SingleVoteChoice,
   VoteChoice,
@@ -22,6 +24,7 @@ import {
 interface ScrollBallotScreenProps {
   voterName: string;
   positions: VotingPosition[];
+  completedBallot?: CompletedBallotEntry[];
   onSubmit: (choices: VoteChoices) => Promise<void>;
 }
 
@@ -220,6 +223,7 @@ function MultiBallotSection({
 export function ScrollBallotScreen({
   voterName,
   positions,
+  completedBallot = [],
   onSubmit,
 }: ScrollBallotScreenProps) {
   const confirm = useConfirm();
@@ -307,15 +311,36 @@ export function ScrollBallotScreen({
         <p className="voter-wing-label">Ballot</p>
         <h1 className="mt-2 voter-heading">Cast your vote</h1>
         <p className="mt-4 voter-subheading">
-          Hello, {voterName}. All positions are on this page — scroll down, make
-          your choices, then submit at the bottom.
+          Hello, {voterName}.{" "}
+          {completedBallot.length > 0
+            ? `You have ${completedBallot.length} position${
+                completedBallot.length === 1 ? "" : "s"
+              } already recorded and ${positions.length} left to complete.`
+            : "All positions are on this page — scroll down, make your choices, then submit at the bottom."}
         </p>
         <p className="mt-3 text-base text-muted-foreground">
-          {answeredCount} of {positions.length} positions completed
+          {completedBallot.length > 0
+            ? `${answeredCount} of ${positions.length} remaining positions completed`
+            : `${answeredCount} of ${positions.length} positions completed`}
         </p>
       </div>
 
       <VotingProgress value={progress} />
+
+      <CompletedVotesSection entries={completedBallot} />
+
+      {positions.length > 0 && (
+        <div className="voter-card">
+          <p className="voter-wing-label">Remaining positions</p>
+          <h2 className="mt-2 text-2xl font-bold text-foreground">
+            Complete your ballot
+          </h2>
+          <p className="mt-2 text-base text-muted-foreground">
+            {answeredCount} of {positions.length} remaining position
+            {positions.length === 1 ? "" : "s"} completed
+          </p>
+        </div>
+      )}
 
       {wingGroups.map((group) => (
         <div key={group.wingName} className="space-y-6">

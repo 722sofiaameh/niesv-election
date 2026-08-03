@@ -16,6 +16,14 @@ export type VotingPosition = {
   candidates: VotingCandidate[];
 };
 
+export type CompletedBallotEntry = {
+  positionId: string;
+  title: string;
+  wingName: string;
+  maxSelections: number;
+  selectedCandidates: VotingCandidate[];
+};
+
 /** Single-choice: one candidate or skip (null) */
 export type SingleVoteChoice = {
   candidateId: string;
